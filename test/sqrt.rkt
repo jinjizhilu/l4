@@ -1,5 +1,9 @@
 #lang racket
 (define (sqrt x)
+  (define (abs value)
+    (if (< value 0)
+        (- 0 value)
+        value))
   (define (good-enough? guess next-guess)
     (< (abs (/ (- guess next-guess)
                next-guess))
@@ -13,4 +17,6 @@
           next-guess
           (sqrt-iter next-guess))))
   (sqrt-iter 1.0))
+
+(sqrt 5)
 

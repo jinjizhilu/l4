@@ -6,14 +6,15 @@
 #include <set>
 using namespace std;
 
+const char* l4_keys[] = {"+", "-", "*", "/", ">", "<", "=", "and", "or", "not", "define", "lambda", "let", "if", "cond", "else", "cons", "car", "cdr", "display"};
+
 struct LexComponent
 {
-	enum {INT, NUM, STR, KEY};
+	enum {NUM, STR, KEY};
 
 	int type;
 	string token;
-	int value;
-	float fvalue;
+	double value;
 	int line;
 
 	void Print();
@@ -50,10 +51,73 @@ public:
 	void MakeTree(const list<LexComponent> &components);
 	void ClearTree();
 	void PrintTree();
+	SyntaxComponent* GetTree() {return root;}
 private:
 	typedef list<LexComponent>::const_iterator TreeIterator;
 	SyntaxComponent* MakeTreeRecursive(TreeIterator &cur, TreeIterator end);
 	void ClearTreeTreeRecursive(SyntaxComponent *node);
 	void PrintTreeRecursive(SyntaxComponent *node, string prefix);
 	SyntaxComponent *root;
+};
+
+struct EnvironmentInfo;
+
+struct FunctionInfo
+{
+	SyntaxComponent *parameter;
+	SyntaxComponent *body;
+	EnvironmentInfo *env;
+};
+
+struct SymbolInfo
+{
+	SymbolInfo():next(NULL){}
+	SymbolInfo* Copy();
+
+	enum {BOOL, NUM, SYS, FUN};
+
+	int type;
+	string name;
+	union
+	{
+		bool flag;
+		double value;
+		FunctionInfo* func;
+	};
+
+	SymbolInfo *next;
+};
+
+struct EnvironmentInfo
+{
+	EnvironmentInfo():head(NULL){}
+
+	SymbolInfo *head;
+	string name;
+
+	void AddSymbol(SymbolInfo *sym);
+	SymbolInfo* FindSymbol(string name);
+	void Print();
+};
+
+class Interpreter
+{
+public:
+	Interpreter():debug(false){};
+	void Run(SyntaxComponent *tree);
+	bool debug;
+
+private:
+	void CheckRecursive(SyntaxComponent *tree);
+
+	SymbolInfo* Evaluate(SyntaxComponent *node);
+	SymbolInfo* Define(SyntaxComponent *node);
+	SymbolInfo* Call(SyntaxComponent *node);
+	SymbolInfo* Arithmetic(SyntaxComponent *node);
+	SymbolInfo* Logic(SyntaxComponent *node);
+	SymbolInfo* Condition(SyntaxComponent *node);
+	SymbolInfo* Let(SyntaxComponent *node);
+	SymbolInfo* SysFunc(SyntaxComponent *node);
+
+	list<EnvironmentInfo*> currentEnvironment;
 };
