@@ -10,7 +10,7 @@ const char* l4_keys[] = {"+", "-", "*", "/", ">", "<", "=", "and", "or", "not", 
 
 struct LexComponent
 {
-	enum {NUM, STR, KEY};
+	enum {NUM, STR, KEY, TXT};
 
 	int type;
 	string token;
@@ -74,7 +74,7 @@ struct SymbolInfo
 	SymbolInfo():next(NULL){}
 	SymbolInfo* Copy();
 
-	enum {BOOL, NUM, SYS, FUN};
+	enum {BOOL, NUM, TXT, PAIR, SYS, FUN};
 
 	int type;
 	string name;
@@ -83,6 +83,8 @@ struct SymbolInfo
 		bool flag;
 		double value;
 		FunctionInfo* func;
+		string* text;
+		SymbolInfo* pdata[2];
 	};
 
 	SymbolInfo *next;
@@ -108,8 +110,6 @@ public:
 	bool debug;
 
 private:
-	void CheckRecursive(SyntaxComponent *tree);
-
 	SymbolInfo* Evaluate(SyntaxComponent *node);
 	SymbolInfo* Define(SyntaxComponent *node);
 	SymbolInfo* Call(SyntaxComponent *node);
@@ -117,6 +117,7 @@ private:
 	SymbolInfo* Logic(SyntaxComponent *node);
 	SymbolInfo* Condition(SyntaxComponent *node);
 	SymbolInfo* Let(SyntaxComponent *node);
+	SymbolInfo* Pair(SyntaxComponent *node);
 	SymbolInfo* SysFunc(SyntaxComponent *node);
 
 	list<EnvironmentInfo*> currentEnvironment;

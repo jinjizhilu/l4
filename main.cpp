@@ -8,11 +8,12 @@ using namespace std;
 
 void LexComponent::Print()
 {
-	printf("[%.3s] ", &"NUM,STR,KEY"[type * 4]);
+	printf("[%.3s] ", &"NUM,STR,KEY,TXT"[type * 4]);
 
 	switch(type)
 	{
 	case KEY:
+	case TXT:
 	case STR:
 		cout << token << ";" << endl; break;
 	case NUM:
@@ -91,6 +92,20 @@ void LexAnalyzer::Parse()
 			}
 			mComponents.push_back(item);
 		}
+		else if (token == '"')
+		{
+			LexComponent item;
+			item.type = LexComponent::TXT;
+			item.token = token;
+			item.line = line;
+
+			while (fin.peek() != -1 && fin.peek() != '"')
+			{
+				item.token += fin.get();
+			}
+			item.token += fin.get();
+			mComponents.push_back(item);
+		}
 		else if (token > 32 && token < 127 && token != ')')
 		{
 			LexComponent item;
@@ -151,6 +166,12 @@ SyntaxComponent* SyntaxAnalyzer::MakeTreeRecursive(TreeIterator &cur, TreeIterat
 		{
 			node->children->push_back(MakeTreeRecursive(cur, end));
 			node->count += 1;
+		}
+
+		if (cur == end)
+		{
+			cout << "expected end of file" << endl;
+			return node;
 		}
 
 		if (cur->token != ")")
@@ -251,6 +272,10 @@ SymbolInfo* EnvironmentInfo::FindSymbol(string name)
 		}
 		p = p->next;
 	}
+	if (p == NULL)
+	{
+		cout << "unrecognized symbol: " << name << endl;
+	}
 	return p;
 }
 
@@ -271,6 +296,8 @@ void EnvironmentInfo::Print()
 			cout << " = " << p->value << endl; break;
 		case SymbolInfo::FUN:
 			cout << " = FUNC" << endl; break;
+		case SymbolInfo::PAIR:
+			cout << " = PAIR" << endl; break;
 		}
 		p = p->next;
 	}
@@ -297,22 +324,6 @@ void Interpreter::Run(SyntaxComponent *tree)
 	}
 }
 
-void Interpreter::CheckRecursive(SyntaxComponent *node)
-{
-	if (node->count > 0)
-	{
-		if ((*node->children->begin())->count == 0)
-		{
-			auto data = (*node->children->begin())->data;
-			cout << data->token << " | " << data->type << endl;
-		}
-		for (auto it=node->children->begin(); it != node->children->end(); ++it)
-		{
-			CheckRecursive(*it);
-		}
-	}
-}
-
 SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 {
 	if (node->count == 0)
@@ -322,6 +333,14 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 			SymbolInfo *sym = new SymbolInfo;
 			sym->type = SymbolInfo::NUM;
 			sym->value = node->data->value;
+			return sym;
+		}
+		else if (node->data->type == LexComponent::TXT)
+		{
+			SymbolInfo *sym = new SymbolInfo;
+			sym->type = SymbolInfo::TXT;
+			sym->text = new string;
+			*sym->text = node->data->token;
 			return sym;
 		}
 		else if (node->data->type == LexComponent::STR)
@@ -364,6 +383,10 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 				else if (op->token == ">" || op->token == "<" || op->token == "=" || op->token == "and" || op->token == "or" || op->token == "not")
 				{
 					return Logic(node);
+				}
+				else if (op->token == "cons" || op->token == "car" || op->token == "cdr")
+				{
+					return Pair(node);
 				}
 				else if (op->token == "display")
 				{
@@ -538,7 +561,6 @@ SymbolInfo* Interpreter::Arithmetic(SyntaxComponent *node)
 	tmp = Evaluate(*++it);
 	assert(tmp != NULL && tmp->type == SymbolInfo::NUM);
 	result->value = tmp->value;
-	delete tmp;
 
 	while (++it != node->children->end())
 	{
@@ -561,7 +583,6 @@ SymbolInfo* Interpreter::Arithmetic(SyntaxComponent *node)
 		{
 			result->value /= tmp->value;
 		}
-		delete tmp;
 	}
 	return result;
 }
@@ -595,8 +616,6 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 		{
 			result->flag =  (first->value == second->value);
 		}
-		delete first;
-		delete second;
 	}
 	else if (op == "and" || op == "or")
 	{
@@ -605,7 +624,6 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 		SymbolInfo *tmp = Evaluate(*++it);
 		assert(tmp != NULL && tmp->type == SymbolInfo::BOOL);
 		result->flag = tmp->flag;
-		delete tmp;
 
 		while (++it != node->children->end())
 		{
@@ -625,7 +643,6 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 			{
 				result->flag = result->flag || tmp->flag;
 			}
-			delete tmp;
 		}
 
 	}
@@ -637,7 +654,6 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 		assert(first != NULL && first->type == SymbolInfo::BOOL);
 
 		result->flag = !first;
-		delete first;
 	}
 	return result;
 }
@@ -672,7 +688,6 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 		{
 			result = Evaluate(*++it);
 		}
-		delete first;
 	}
 	else if (op == "cond")
 	{
@@ -692,10 +707,8 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 				if (flag->flag)
 				{
 					result = Evaluate(line->children->back());
-					delete flag;
 					break;
 				}
-				delete flag;
 			}
 			else // else condition
 			{
@@ -717,7 +730,7 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 
 	SymbolInfo *result = NULL;
 	auto it = node->children->begin();
-	assert((*it)->data->token == "let" && node->count == 3);
+	assert((*it)->data->token == "let");
 
 	EnvironmentInfo *env = new EnvironmentInfo;
 	env->head = currentEnvironment.front()->head;
@@ -742,9 +755,46 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 		currentEnvironment.front()->AddSymbol(sym);
 	}
 	
-	result = Evaluate(*++it);
+	while (++it != node->children->end())
+	{
+		result = Evaluate(*it);
+	}
 	currentEnvironment.pop_front();
 
+	return result;
+}
+
+SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
+{
+	auto it = node->children->begin();
+	string op = (*it)->data->token;
+	SymbolInfo *result = NULL;
+
+	if (op == "cons")
+	{
+		assert(node->count == 3);
+		SymbolInfo *first = Evaluate(*++it);
+		SymbolInfo *second = Evaluate(*++it);
+
+		result = new SymbolInfo;
+		result->type = SymbolInfo::PAIR;
+		result->pdata[0] = first;
+		result->pdata[1] = second;
+	}
+	else if (op == "car")
+	{
+		assert(node->count == 2);
+		SymbolInfo *sym = Evaluate(*++it);
+		assert(sym != NULL && sym->type == SymbolInfo::PAIR);
+		result = sym->pdata[0];
+	}
+	else if (op == "cdr")
+	{
+		assert(node->count == 2);
+		SymbolInfo *sym = Evaluate(*++it);
+		assert(sym != NULL && sym->type == SymbolInfo::PAIR);
+		result = sym->pdata[1];
+	}
 	return result;
 }
 
@@ -760,10 +810,21 @@ SymbolInfo* Interpreter::SysFunc(SyntaxComponent *node)
 		while (++it != node->children->end())
 		{
 			SymbolInfo *sym = Evaluate(*it);
-			assert(sym != NULL && sym->type == SymbolInfo::NUM);
-			cout << sym->value << " ";
+			assert(sym != NULL);
+
+			if (sym->type == SymbolInfo::NUM)
+			{
+				cout << sym->value;
+			}
+			else if (sym->type == SymbolInfo::TXT)
+			{
+				cout << sym->text->substr(1, sym->text->size() - 2);
+			}
+			else
+			{
+				cout << "wrong parameter for display" << endl;
+			}
 		}
-		cout << endl;
 	}
 
 	return result;
@@ -779,6 +840,7 @@ int main(int argc, char **argv)
 
 	LexAnalyzer lex;
 	string src_file(argv[1]);
+	src_file = "test/segment.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
