@@ -311,6 +311,7 @@ void Interpreter::Run(SyntaxComponent *tree)
 	currentEnvironment.clear();
 	currentEnvironment.push_front(new EnvironmentInfo);
 	currentEnvironment.front()->name = "global";
+	lastResult = NULL;
 
 	for (auto it=tree->children->begin(); it != tree->children->end(); ++it)
 	{
@@ -325,94 +326,130 @@ void Interpreter::Run(SyntaxComponent *tree)
 
 SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 {
-	if (node->count == 0)
-	{
-		if (node->data->type == LexComponent::NUM)
-		{
-			SymbolInfo *sym = new SymbolInfo;
-			sym->type = SymbolInfo::NUM;
-			sym->value = node->data->value;
-			return sym;
-		}
-		else if (node->data->type == LexComponent::TXT)
-		{
-			SymbolInfo *sym = new SymbolInfo;
-			sym->type = SymbolInfo::TXT;
-			sym->text = new string;
-			*sym->text = node->data->token;
-			return sym;
-		}
-		else if (node->data->type == LexComponent::STR)
-		{
-			SymbolInfo *sym = currentEnvironment.front()->FindSymbol(node->data->token);
-			assert(sym != NULL);
-			return sym;
-		}
-		else
-		{
-			cout << "error in statement at line " << node->data->line << "!" << endl;
-		}
-	}
-	else
-	{
-		assert(node->count > 0);
-		SyntaxComponent *first = node->children->front();
+	bool flag = true;
+	SymbolInfo *result = NULL;
+	int envCount = 0;
 
-		if (first->count == 0) // common call
+	while (flag)
+	{
+		flag = false;
+		lastResult = NULL;
+
+		if (node->count == 0)
 		{
-			LexComponent *op = first->data;
-			if (op->type == LexComponent::KEY)
+			if (node->data->type == LexComponent::NUM)
 			{
-				if (op->token == "define" || op->token == "lambda")
-				{
-					return Define(node);
-				}
-				else if (op->token == "set!")
-				{
-					return Assign(node);
-				}
-				else if (op->token == "let")
-				{
-					return Let(node);
-				}
-				else if (op->token == "if" || op->token == "cond")
-				{
-					return Condition(node);
-				}
-				else if (op->token == "+" || op->token == "-" || op->token == "*" || op->token == "/")
-				{
-					return Arithmetic(node);
-				}
-				else if (op->token == ">" || op->token == "<" || op->token == "=" || op->token == "and" || op->token == "or" || op->token == "not")
-				{
-					return Logic(node);
-				}
-				else if (op->token == "cons" || op->token == "car" || op->token == "cdr")
-				{
-					return Pair(node);
-				}
-				else if (op->token == "display")
-				{
-					return SysFunc(node);
-				}
-				else
-				{
-					cout << "unrecognized key: " << node->data->token << "at line " << node->data->line << "!" << endl;	
-				}
+				SymbolInfo *sym = new SymbolInfo;
+				sym->type = SymbolInfo::NUM;
+				sym->value = node->data->value;
+				result = sym;
+			}
+			else if (node->data->type == LexComponent::TXT)
+			{
+				SymbolInfo *sym = new SymbolInfo;
+				sym->type = SymbolInfo::TXT;
+				sym->text = new string;
+				*sym->text = node->data->token;
+				result = sym;
+			}
+			else if (node->data->type == LexComponent::STR)
+			{
+				SymbolInfo *sym = currentEnvironment.front()->FindSymbol(node->data->token);
+				assert(sym != NULL);
+				result = sym;
 			}
 			else
 			{
-				assert(op->type == LexComponent::STR);
-				return Call(node);
+				cout << "error in statement at line " << node->data->line << "!" << endl;
 			}
 		}
-		else // lambda call
+		else
 		{
-			assert(first->count > 0);
-			return Call(node);
+			assert(node->count > 0);
+			SyntaxComponent *first = node->children->front();
+
+			if (first->count == 0) // common call
+			{
+				LexComponent *op = first->data;
+				if (op->type == LexComponent::KEY)
+				{
+					if (op->token == "define" || op->token == "lambda")
+					{
+						result = Define(node);
+					}
+					else if (op->token == "set!")
+					{
+						result = Assign(node);
+					}
+					else if (op->token == "let")
+					{
+						result = Let(node);
+					}
+					else if (op->token == "if" || op->token == "cond")
+					{
+						result = Condition(node);
+
+						if (lastResult != NULL)
+						{
+							node = lastResult;
+							flag = true;
+						}
+					}
+					else if (op->token == "+" || op->token == "-" || op->token == "*" || op->token == "/" || op->token == "%")
+					{
+						result = Arithmetic(node);
+					}
+					else if (op->token == ">" || op->token == "<" || op->token == "=" || op->token == "and" || op->token == "or" || op->token == "not")
+					{
+						result = Logic(node);
+					}
+					else if (op->token == "cons" || op->token == "car" || op->token == "cdr")
+					{
+						result = Pair(node);
+					}
+					else if (op->token == "display" || op->token == "newline")
+					{
+						result = SysFunc(node);
+					}
+					else
+					{
+						cout << "unrecognized key: " << node->data->token << "at line " << node->data->line << "!" << endl;
+					}
+				}
+				else
+				{
+					assert(op->type == LexComponent::STR);
+					result = Call(node);
+
+					if (lastResult != NULL)
+					{
+						node = lastResult;
+						flag = true;
+						++envCount;
+					}
+				}
+			}
+			else // lambda call
+			{
+				assert(first->count > 0);
+				result = Call(node);
+
+				if (lastResult != NULL)
+				{
+					node = lastResult;
+					flag = true;
+					++envCount;
+				}
+			}
 		}
 	}
-	return NULL;
+	for (int i=0; i<envCount; ++i)
+	{
+		delete currentEnvironment.front();
+		currentEnvironment.pop_front();
+	}
+
+	return result;
 }
 
 SymbolInfo* Interpreter::Define(SyntaxComponent *node)
@@ -434,7 +471,9 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 	if (variable->count == 0) // variable define
 	{
 		assert(node->count == 3);
-		SymbolInfo *sym = Evaluate(*++it)->Copy();
+		SymbolInfo *sym = Evaluate(*++it);
+		assert(sym != NULL);
+		sym = sym->Copy();
 
 		assert(variable->data->type == LexComponent::STR);
 		sym->name = variable->data->token;
@@ -533,15 +572,16 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	
 	// handle paremeters
 	auto pIt = (*++fIt)->children->begin();
-	if (sym->name != "lambda")
+	if (sym->name == (*pIt)->data->token)
 	{
 		++pIt; // skip function name
 	}
 
 	while (++it != node->children->end() && pIt != (*fIt)->children->end())
 	{
-		tmp = Evaluate(*it)->Copy();
+		tmp = Evaluate(*it);
 		assert(tmp != NULL);
+		tmp = tmp->Copy();
 
 		LexComponent *parameter = (*pIt)->data;
 		assert((*pIt)->count == 0 && parameter->type == LexComponent::STR);
@@ -560,14 +600,16 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 		currentEnvironment.front()->Print();
 	}
 
-	while (++fIt != function->children->end())
+	assert(++fIt != function->children->end());
+
+	while (*fIt != function->children->back())
 	{
 		result = Evaluate(*fIt);
+		++fIt;
 	}
-	
-	currentEnvironment.pop_front();
+	lastResult = *fIt;
 
-	return result;
+	return NULL;
 }
 
 SymbolInfo* Interpreter::Arithmetic(SyntaxComponent *node)
@@ -603,6 +645,11 @@ SymbolInfo* Interpreter::Arithmetic(SyntaxComponent *node)
 		else if (op == "/")
 		{
 			result->value /= tmp->value;
+		}
+		else if (op == "%")
+		{
+			assert(node->count == 3);
+			result->value = int(result->value) % int(tmp->value);
 		}
 	}
 	return result;
@@ -703,11 +750,11 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 		++it;
 		if (first->flag)
 		{
-			result = Evaluate(*it);
+			lastResult = *it;
 		}
 		else
 		{
-			result = Evaluate(*++it);
+			lastResult = *++it;
 		}
 	}
 	else if (op == "cond")
@@ -727,7 +774,7 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 
 				if (flag->flag)
 				{
-					result = Evaluate(line->children->back());
+					lastResult = line->children->back();
 					break;
 				}
 			}
@@ -735,7 +782,7 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 			{
 				SyntaxComponent *first = line->children->front();
 				assert(first->count == 0 && first->data->token == "else" && ++it == node->children->end());
-				result = Evaluate(line->children->back());
+				lastResult = line->children->back();
 				break;
 			}
 		}
@@ -780,6 +827,8 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 	{
 		result = Evaluate(*it);
 	}
+
+	delete currentEnvironment.front();
 	currentEnvironment.pop_front();
 
 	return result;
@@ -847,6 +896,11 @@ SymbolInfo* Interpreter::SysFunc(SyntaxComponent *node)
 			}
 		}
 	}
+	else if (op == "newline")
+	{
+		assert(node->count == 1);
+		cout << endl;
+	}
 
 	return result;
 }
@@ -861,7 +915,7 @@ int main(int argc, char **argv)
 
 	LexAnalyzer lex;
 	string src_file(argv[1]);
-	src_file = "test/test.rkt";
+	src_file = "test/fix-point.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -877,7 +931,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = true;
+	//vm.debug = true;
 	vm.Run(syntax.GetTree());
 
 	syntax.ClearTree();
