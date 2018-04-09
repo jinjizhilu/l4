@@ -4,9 +4,10 @@
 #include <vector>
 #include <list>
 #include <set>
+#include <memory>
 using namespace std;
 
-const char* l4_keys[] = {"+", "-", "*", "/", ">", "<", "=", "and", "or", "not", "define", "lambda", "let", "if", "cond", "else", "cons", "car", "cdr", "display"};
+const char* l4_keys[] = {"+", "-", "*", "/", ">", "<", "=", "and", "or", "not", "define", "lambda", "set!", "let", "if", "cond", "else", "cons", "car", "cdr", "display"};
 
 struct LexComponent
 {
@@ -112,11 +113,12 @@ public:
 private:
 	SymbolInfo* Evaluate(SyntaxComponent *node);
 	SymbolInfo* Define(SyntaxComponent *node);
+	SymbolInfo* Let(SyntaxComponent *node);
 	SymbolInfo* Call(SyntaxComponent *node);
 	SymbolInfo* Arithmetic(SyntaxComponent *node);
 	SymbolInfo* Logic(SyntaxComponent *node);
 	SymbolInfo* Condition(SyntaxComponent *node);
-	SymbolInfo* Let(SyntaxComponent *node);
+	SymbolInfo* Assign(SyntaxComponent *node);
 	SymbolInfo* Pair(SyntaxComponent *node);
 	SymbolInfo* SysFunc(SyntaxComponent *node);
 

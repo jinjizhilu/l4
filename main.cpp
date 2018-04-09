@@ -319,7 +319,6 @@ void Interpreter::Run(SyntaxComponent *tree)
 		if (result != NULL && result->type == SymbolInfo::NUM)
 		{
 			cout << result->value << endl;
-			delete result;
 		}
 	}
 }
@@ -347,7 +346,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 		{
 			SymbolInfo *sym = currentEnvironment.front()->FindSymbol(node->data->token);
 			assert(sym != NULL);
-			return sym->Copy();
+			return sym;
 		}
 		else
 		{
@@ -367,6 +366,10 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 				if (op->token == "define" || op->token == "lambda")
 				{
 					return Define(node);
+				}
+				else if (op->token == "set!")
+				{
+					return Assign(node);
 				}
 				else if (op->token == "let")
 				{
@@ -431,7 +434,7 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 	if (variable->count == 0) // variable define
 	{
 		assert(node->count == 3);
-		SymbolInfo *sym = Evaluate(*++it);
+		SymbolInfo *sym = Evaluate(*++it)->Copy();
 
 		assert(variable->data->type == LexComponent::STR);
 		sym->name = variable->data->token;
@@ -468,6 +471,24 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 			return sym;
 		}
 	}
+	return NULL;
+}
+
+SymbolInfo* Interpreter::Assign(SyntaxComponent *node)
+{
+	assert(node->count == 3);
+
+	auto it = node->children->begin();
+	SyntaxComponent *variable = *++it;
+	assert(variable->count == 0 && variable->data->type == LexComponent::STR);
+
+	SymbolInfo *sym = Evaluate(variable);
+	SymbolInfo *result = Evaluate(*++it);
+	assert(sym != NULL && result != NULL);
+
+	sym->type = result->type;
+	sym->value = result->value;
+
 	return NULL;
 }
 
@@ -519,7 +540,7 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 
 	while (++it != node->children->end() && pIt != (*fIt)->children->end())
 	{
-		tmp = Evaluate(*it);
+		tmp = Evaluate(*it)->Copy();
 		assert(tmp != NULL);
 
 		LexComponent *parameter = (*pIt)->data;
@@ -840,7 +861,7 @@ int main(int argc, char **argv)
 
 	LexAnalyzer lex;
 	string src_file(argv[1]);
-	src_file = "test/segment.rkt";
+	src_file = "test/test.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -856,7 +877,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	//vm.debug = true;
+	vm.debug = true;
 	vm.Run(syntax.GetTree());
 
 	syntax.ClearTree();
