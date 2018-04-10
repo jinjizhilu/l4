@@ -655,7 +655,8 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 		currentEnvironment.front()->Print();
 	}
 
-	assert(++fIt != function->children->end());
+	++fIt;
+	assert(fIt != function->children->end());
 
 	while (*fIt != function->children->back())
 	{
@@ -1028,7 +1029,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	//src_file = "test/fast-prime-miller-rabin.rkt";
+	src_file = "test/accumulate.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1054,6 +1055,6 @@ int main(int argc, char **argv)
 
 	syntax.ClearTree();
 
-	//system("pause");
+	system("pause");
 	return 0;
 }
