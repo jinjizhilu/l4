@@ -1,0 +1,28 @@
+(define (abs value)
+    (if (< value 0)
+        (- 0 value)
+        value))
+
+(define (remainder a b)
+	(% a b))
+
+(define (add a b)
+	(+ a b))
+
+(define (sub a b)
+	(- a b))
+
+(define (mul a b)
+	(* a b))
+
+(define (div a b)
+	(/ a b))
+
+(define (pair a b)
+	(cons a b))
+
+(define (first p)
+	(car p))
+
+(define (last p)
+	(cdr p))

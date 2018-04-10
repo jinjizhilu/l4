@@ -1,6 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include <cstdio>
+#include <ctime>
+#include <cstdlib>
 #include <cassert>
 #include <windows.h>
 #include "parser.h"
@@ -294,10 +296,16 @@ void EnvironmentInfo::Print()
 			cout << " = " << (p->flag ? "true" : "false") << endl; break;
 		case SymbolInfo::NUM:
 			cout << " = " << p->value << endl; break;
+		case SymbolInfo::TXT:
+			cout << " = " << *(p->text) << endl; break;
 		case SymbolInfo::FUN:
 			cout << " = FUNC" << endl; break;
+		case SymbolInfo::LAMBDA:
+			cout << " = LAMBDA" << endl; break;
 		case SymbolInfo::PAIR:
 			cout << " = PAIR" << endl; break;
+		case SymbolInfo::NIL:
+			cout << " = NULL" << endl; break;
 		}
 		p = p->next;
 	}
@@ -308,6 +316,7 @@ void Interpreter::Run(SyntaxComponent *tree)
 {
 	assert(tree->count > 0);
 
+	srand(unsigned int(time(NULL)));
 	currentEnvironment.clear();
 	currentEnvironment.push_front(new EnvironmentInfo);
 	currentEnvironment.front()->name = "global";
@@ -317,9 +326,29 @@ void Interpreter::Run(SyntaxComponent *tree)
 	{
 		SymbolInfo *result = Evaluate(*it);
 
-		if (result != NULL && result->type == SymbolInfo::NUM)
+		if (result != NULL)
 		{
-			cout << result->value << endl;
+			if (result->type == SymbolInfo::NUM)
+			{
+				cout << result->value << endl;
+			}
+			else if (result->type == SymbolInfo::BOOL)
+			{
+				cout << (result->flag ? "true" : "false") << endl;
+			}
+			else if (result->type == SymbolInfo::PAIR)
+			{
+				cout << "(";
+
+				SymbolInfo **p = &result;
+				while ((*p)->type != SymbolInfo::NIL)
+				{
+					assert((*p)->pdata[0]->type == SymbolInfo::NUM);
+					cout << (*p)->pdata[0]->value << " ";
+					p = &(*p)->pdata[1];
+				}
+				cout << ")" << endl;
+			}
 		}
 	}
 }
@@ -357,6 +386,27 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 				SymbolInfo *sym = currentEnvironment.front()->FindSymbol(node->data->token);
 				assert(sym != NULL);
 				result = sym;
+			}
+			else if (node->data->type == LexComponent::KEY)
+			{
+				if (node->data->token == "true" || node->data->token == "false")
+				{
+					SymbolInfo *sym = new SymbolInfo;
+					sym->type = SymbolInfo::BOOL;
+					sym->flag = (node->data->token == "true");
+					result = sym;
+				}
+				else if (node->data->token == "null")
+				{
+					SymbolInfo *sym = new SymbolInfo;
+					sym->type = SymbolInfo::NIL;
+					result = sym;
+				}
+				else
+				{
+
+					//cout << "illeagal use of key word \"" << node->data->token << "\"" << endl;
+				}
 			}
 			else
 			{
@@ -403,13 +453,17 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 					{
 						result = Logic(node);
 					}
-					else if (op->token == "cons" || op->token == "car" || op->token == "cdr")
+					else if (op->token == "cons" || op->token == "car" || op->token == "cdr" || op->token == "pair?")
 					{
 						result = Pair(node);
 					}
-					else if (op->token == "display" || op->token == "newline")
+					else if (op->token == "list" || op->token == "null?")
 					{
-						result = SysFunc(node);
+						result = List(node);
+					}
+					else if (op->token == "display" || op->token == "newline" || op->token == "random")
+					{
+						result = MiscFunc(node);
 					}
 					else
 					{
@@ -507,6 +561,7 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 		}
 		else if (op == "lambda")
 		{
+			sym->type = SymbolInfo::LAMBDA;
 			return sym;
 		}
 	}
@@ -549,13 +604,13 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	{
 		string funcName = first->data->token;
 		sym = currentEnvironment.front()->FindSymbol(funcName);
-		assert(sym != NULL && sym->type == SymbolInfo::FUN);
+		assert(sym != NULL && (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA));
 	}
 	else // call by lambda or function result
 	{
 		assert(first->count > 0);
 		sym = Evaluate(first);
-		assert(sym != NULL && sym->type == SymbolInfo::FUN);
+		assert(sym != NULL && (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA));
 	}
 
 	if (debug)
@@ -572,7 +627,7 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	
 	// handle paremeters
 	auto pIt = (*++fIt)->children->begin();
-	if (sym->name == (*pIt)->data->token)
+	if (sym->type == SymbolInfo::FUN)
 	{
 		++pIt; // skip function name
 	}
@@ -865,10 +920,57 @@ SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
 		assert(sym != NULL && sym->type == SymbolInfo::PAIR);
 		result = sym->pdata[1];
 	}
+	else if (op == "pair?")
+	{
+		assert(node->count == 2);
+		SymbolInfo *sym = Evaluate(*++it);
+		assert(sym != NULL);
+
+		result = new SymbolInfo;
+		result->type = SymbolInfo::BOOL;
+		result->flag = (sym->type == SymbolInfo::PAIR);
+	}
 	return result;
 }
 
-SymbolInfo* Interpreter::SysFunc(SyntaxComponent *node)
+SymbolInfo* Interpreter::List(SyntaxComponent *node)
+{
+	auto it = node->children->begin();
+	string op = (*it)->data->token;
+	SymbolInfo *result = NULL;
+
+	if (op == "null?")
+	{
+		assert(node->count == 2);
+		SymbolInfo *sym = Evaluate(*++it);
+		assert(sym != NULL);
+
+		result = new SymbolInfo;
+		result->type = SymbolInfo::BOOL;
+		result->flag = (sym->type == SymbolInfo::NIL);
+	}
+	else if (op == "list")
+	{
+		SymbolInfo **last = &result;
+		SymbolInfo *tail = new SymbolInfo;
+		tail->type = SymbolInfo::NIL;
+
+		while (++it != node->children->end())
+		{
+			SymbolInfo *sym = Evaluate(*it);
+			assert(sym != NULL);
+
+			(*last) = new SymbolInfo;
+			(*last)->type = SymbolInfo::PAIR;
+			(*last)->pdata[0] = sym;
+			last = &(*last)->pdata[1];
+		}
+		(*last) = tail;
+	}
+	return result;
+}
+
+SymbolInfo* Interpreter::MiscFunc(SyntaxComponent *node)
 {
 	auto it = node->children->begin();
 	string op = (*it)->data->token;
@@ -901,6 +1003,16 @@ SymbolInfo* Interpreter::SysFunc(SyntaxComponent *node)
 		assert(node->count == 1);
 		cout << endl;
 	}
+	else if (op == "random")
+	{
+		assert(node->count == 2);
+		SymbolInfo *sym = Evaluate(*++it);
+		assert(sym != NULL && sym->type == SymbolInfo::NUM);
+
+		result = new SymbolInfo;
+		result->type = SymbolInfo::NUM;
+		result->value = int(rand() * sym->value);
+	}
 
 	return result;
 }
@@ -914,14 +1026,20 @@ int main(int argc, char **argv)
 	}
 
 	LexAnalyzer lex;
+	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	src_file = "test/fix-point.rkt";
+	//src_file = "test/fast-prime-miller-rabin.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
 		lex.AddKey(l4_keys[i]);
 	}
 
+	// load lib
+	lex.SetSourceFile(lib_file);
+	lex.Parse();
+
+	// load src file
 	lex.SetSourceFile(src_file);
 	lex.Parse();
 	//lex.Print();
@@ -936,6 +1054,6 @@ int main(int argc, char **argv)
 
 	syntax.ClearTree();
 
-	system("pause");
+	//system("pause");
 	return 0;
 }

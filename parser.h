@@ -6,7 +6,7 @@
 #include <set>
 using namespace std;
 
-const char* l4_keys[] = {"+", "-", "*", "/", "%", ">", "<", "=", "and", "or", "not", "define", "lambda", "set!", "let", "if", "cond", "else", "cons", "car", "cdr", "display", "newline"};
+const char* l4_keys[] = {"+", "-", "*", "/", "%", ">", "<", "=", "and", "or", "not", "define", "lambda", "set!", "let", "if", "cond", "else", "true", "false", "cons", "car", "cdr", "pair?", "list", "null", "null?", "display", "newline", "random"};
 
 struct LexComponent
 {
@@ -74,7 +74,7 @@ struct SymbolInfo
 	SymbolInfo():next(NULL){}
 	SymbolInfo* Copy();
 
-	enum {BOOL, NUM, TXT, PAIR, SYS, FUN};
+	enum {BOOL, NUM, TXT, PAIR, NIL, SYS, FUN, LAMBDA};
 
 	int type;
 	string name;
@@ -119,7 +119,8 @@ private:
 	SymbolInfo* Condition(SyntaxComponent *node);
 	SymbolInfo* Assign(SyntaxComponent *node);
 	SymbolInfo* Pair(SyntaxComponent *node);
-	SymbolInfo* SysFunc(SyntaxComponent *node);
+	SymbolInfo* List(SyntaxComponent *node);
+	SymbolInfo* MiscFunc(SyntaxComponent *node);
 
 	SyntaxComponent *lastResult;
 	list<EnvironmentInfo*> currentEnvironment;
