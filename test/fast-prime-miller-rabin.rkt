@@ -23,3 +23,5 @@
   (cond ((= times 0) true)
         ((miller-rabin-test n) (fast-prime? n (- times 1)))
         (else false)))
+
+(fast-prime? 523109585 100)

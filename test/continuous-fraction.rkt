@@ -16,7 +16,7 @@
 (define (n x i)
   (if (= i 1)
       x
-      (- (* x x))))
+      (- 0 (* x x))))
   
 (define (d i)
   (- (* i 2) 1))
@@ -24,3 +24,4 @@
 (define (tan-cf x k)
   (cont-frac2 (lambda (i) (n x i)) d k))
               
+(tan-cf 0.2 100)

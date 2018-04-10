@@ -49,3 +49,10 @@
   (display (numer x))
   (display "/")
   (display (denom x)))
+
+(define r1 (make-rat 4 7))
+(define r2 (make-rat 5 3))
+(define r3 (sub-rat r1 r2))
+(define r4 (mul-rat r1 r2))
+(print-rat r3)
+(print-rat r4)

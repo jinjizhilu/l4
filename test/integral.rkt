@@ -33,3 +33,6 @@
     (define (inc x) (+ x 1))
     (* (sum fx 0 inc n)
        (/ h 3.0))))
+
+(integral (lambda (x) (+ (cube x) (* x 3) -5)) -5 7 0.01)
+(simpson (lambda (x) (+ (cube x) (* x 3) -5)) -5 7 10)

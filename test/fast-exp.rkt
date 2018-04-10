@@ -8,3 +8,6 @@
            (fast-exp-iter (* a c) c (- i 1)))))
   (fast-exp-iter 1 b n))
 
+(fast-exp 2 10)
+(fast-exp 2 30)
+(fast-exp 17 7)

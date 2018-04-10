@@ -18,3 +18,5 @@
   (cond ((= times 0) true)
         ((fermat-test n) (fast-prime? n (- times 1)))
         (else false)))
+
+(fast-prime? 850343901 100)

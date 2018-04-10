@@ -28,3 +28,5 @@
   (define (f y)
     (/ x (fast-exp y (- n 1))))
   (fix-point ((repeated average-damp 4) f) 1.0))
+
+(root-n 7483 7)

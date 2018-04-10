@@ -1,5 +1,10 @@
 #lang racket
 
+(define (abs value)
+    (if (< value 0)
+        (- 0 value)
+        value))
+
 (define (make-segment p1 p2)
   (cons p1 p2))
 
@@ -19,7 +24,6 @@
   (cdr p))
 
 (define (print-point p)
-  (newline)
   (display "(")
   (display (x-point p))
   (display ",")
@@ -40,7 +44,7 @@
                    (x-point (end-segment s)))))
         (dy (abs (- (y-point (start-segment s))
                    (y-point (end-segment s))))))
-    (sqrt (+ (* dx dx) (* dy dy)))))
+    (+ 0  (+ (* dx dx) (* dy dy)))))
 
 (define (make-square s1 s2)
   (cons s1 s2))
@@ -50,3 +54,7 @@
 
 (define (square-circumference s)
   (* (+ (car s) (cdr s)) 2))
+
+(let ((l (make-segment (make-point 4 32) (make-point 8 43))))
+  (midpoint-segment l)
+  (display (segment-length l)))

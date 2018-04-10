@@ -1,4 +1,9 @@
 #lang racket
+(define (abs value)
+  (if (< value 0)
+    (- 0 value)
+    value))
+
 (define (fix-point f first-guess)
   (let ((next-guess (f first-guess)))
     (display next-guess)
@@ -12,3 +17,5 @@
 
 (define (calc-theta)
   (fix-point (lambda (y) (+ (/ 1.0 y) 1)) 1.0))
+
+(calc-theta)

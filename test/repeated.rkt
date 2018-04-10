@@ -39,4 +39,12 @@
         smooth-f
         (iter (- i 1) (smooth smooth-f))))
   (iter n f))
-       
+
+
+(define (f x) (+ (* x x x) (* x -6)))
+(define f2 (smooth f))
+(define f3 (smooth-n-times f 5))
+
+(f 23)
+(f2 23)
+(f3 23)

@@ -28,5 +28,9 @@
 (define (accumulate-n op init seqs)
   (if (null? (car seqs))
       null
-      (cons (accumulate op init (map car seqs))
-            (accumulate-n op init (map cdr seqs)))))
+      (cons (accumulate op init (map first seqs))
+            (accumulate-n op init (map last seqs)))))
+
+(accumulate add 0 (list 1 2 3 4 5 6 7 8 9))
+(accumulate add 0 (cons 9 (cons 8 null)))
+(accumulate-n add 0 (list (list 1 2 3 4 5 6 7 8 9) (list 2 3 4 5 6 7 8 9 10)))

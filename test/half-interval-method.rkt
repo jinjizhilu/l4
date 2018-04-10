@@ -18,4 +18,6 @@
           ((and (> a-value 0) (< b-value 0))
            (search f b a))
           (else
-           (error "Values are not of opposite sign" a b)))))
+           (display "Values are not of opposite sign" a b)))))
+
+(half-interval-method (lambda (x) (+ (* x x) (* x -2) -1)) -10 2)

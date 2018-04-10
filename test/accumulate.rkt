@@ -14,9 +14,12 @@
       null-value
       (combiner (accumulate2 combiner null-value term (next a) next b)
                 (term a))))
-  
+
+(define (mul a b) (* a b))
+(define (remainder a b) (% a b))
+
 (define (product term a next b)
-  (accumulate * 1 term a next b))
+  (accumulate mul 1 term a next b))
 
 (define (factorial n)
   (define (identity x) x)
@@ -29,3 +32,5 @@
         (/ (+ i 2.0) (+ i 1.0))))
   (* (product term 1 inc n)
      4.0))
+
+(calc-pi 10000)

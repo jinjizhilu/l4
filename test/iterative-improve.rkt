@@ -27,3 +27,5 @@
 
 (define (calc-theta)
   (fix-point (lambda (y) (+ (/ 1.0 y) 1)) 1.0))
+
+(calc-theta)
