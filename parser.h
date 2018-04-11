@@ -72,7 +72,7 @@ struct FunctionInfo
 struct SymbolInfo
 {
 	SymbolInfo():next(NULL){}
-	SymbolInfo* Copy();
+	void Print();
 
 	enum {BOOL, NUM, TXT, PAIR, NIL, SYS, FUN, LAMBDA};
 
@@ -88,6 +88,9 @@ struct SymbolInfo
 	};
 
 	SymbolInfo *next;
+
+	enum {NOT_USE, IN_TABLE, TO_USE};
+	int useState;
 };
 
 struct EnvironmentInfo
@@ -105,9 +108,15 @@ struct EnvironmentInfo
 class Interpreter
 {
 public:
-	Interpreter():debug(false){};
+	enum{
+		DEBUG_FUNC_CALL = 1,
+		DEBUG_SYMBOL_MARK = 1 << 1,
+		DEBUG_SYMBOL_CLEAR = 1 << 2,
+	};
+
+	Interpreter():debug(0), maxSymbolNum(128){};
 	void Run(SyntaxComponent *tree);
-	bool debug;
+	int debug;
 
 private:
 	SymbolInfo* Evaluate(SyntaxComponent *node);
@@ -122,6 +131,17 @@ private:
 	SymbolInfo* List(SyntaxComponent *node);
 	SymbolInfo* MiscFunc(SyntaxComponent *node);
 
+	SymbolInfo* CopySymbol(SymbolInfo *sym);
+	SymbolInfo* NewSymbol();
+	void ReleaseSymbol(SymbolInfo *sym);
+	void CheckSymbols();
+	void MarkEnvironment(EnvironmentInfo *env, string prefix);
+	void MarkSymbol(SymbolInfo *sym, string prefix);
+	void ClearSymbols(bool force = false);
+	unsigned int maxSymbolNum;
+
 	SyntaxComponent *lastResult;
 	list<EnvironmentInfo*> currentEnvironment;
+	list<EnvironmentInfo*> tmpEnvironment;
+	list<SymbolInfo*> symbolRecord;
 };

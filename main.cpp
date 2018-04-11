@@ -246,15 +246,29 @@ void SyntaxAnalyzer::PrintTreeRecursive(SyntaxComponent *node, string prefix)
 	}
 }
 
-SymbolInfo* SymbolInfo::Copy()
+void SymbolInfo::Print()
 {
-	SymbolInfo *result = new SymbolInfo;
-	result->type = type;
-	result->name = name;
-	result->value = value;
-	result->next = next;
+	cout << name;
 
-	return result;
+	switch(type)
+	{
+	case SymbolInfo::BOOL:
+		cout << " = " << (flag ? "true" : "false") << endl; break;
+	case SymbolInfo::NUM:
+		cout << " = " << value << endl; break;
+	case SymbolInfo::TXT:
+		cout << " = " << *(text) << endl; break;
+	case SymbolInfo::FUN:
+		cout << " = FUNC" << endl; break;
+	case SymbolInfo::LAMBDA:
+		cout << " = LAMBDA" << endl; break;
+	case SymbolInfo::PAIR:
+		cout << " = PAIR" << endl; break;
+	case SymbolInfo::NIL:
+		cout << " = NULL" << endl; break;
+	default:
+		assert("unrecognized symbol type" == 0);
+	}
 }
 
 void EnvironmentInfo::AddSymbol(SymbolInfo *sym)
@@ -289,24 +303,8 @@ void EnvironmentInfo::Print()
 	SymbolInfo *p = head;
 	while (p != NULL)
 	{
-		cout << "\t" << p->name;
-		switch(p->type)
-		{
-		case SymbolInfo::BOOL:
-			cout << " = " << (p->flag ? "true" : "false") << endl; break;
-		case SymbolInfo::NUM:
-			cout << " = " << p->value << endl; break;
-		case SymbolInfo::TXT:
-			cout << " = " << *(p->text) << endl; break;
-		case SymbolInfo::FUN:
-			cout << " = FUNC" << endl; break;
-		case SymbolInfo::LAMBDA:
-			cout << " = LAMBDA" << endl; break;
-		case SymbolInfo::PAIR:
-			cout << " = PAIR" << endl; break;
-		case SymbolInfo::NIL:
-			cout << " = NULL" << endl; break;
-		}
+		cout << "\t";
+		p->Print();
 		p = p->next;
 	}
 	cout << "}" << endl;
@@ -317,7 +315,6 @@ void Interpreter::Run(SyntaxComponent *tree)
 	assert(tree->count > 0);
 
 	srand(unsigned int(time(NULL)));
-	currentEnvironment.clear();
 	currentEnvironment.push_front(new EnvironmentInfo);
 	currentEnvironment.front()->name = "global";
 	lastResult = NULL;
@@ -350,7 +347,13 @@ void Interpreter::Run(SyntaxComponent *tree)
 				cout << ")" << endl;
 			}
 		}
+		ReleaseSymbol(result);
 	}
+
+	delete currentEnvironment.front();
+	currentEnvironment.pop_front();
+
+	ClearSymbols(true);
 }
 
 SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
@@ -361,6 +364,12 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 
 	while (flag)
 	{
+		if (symbolRecord.size() > maxSymbolNum) // garbage collection
+		{
+			CheckSymbols();
+			ClearSymbols();
+		}
+
 		flag = false;
 		lastResult = NULL;
 
@@ -368,14 +377,14 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 		{
 			if (node->data->type == LexComponent::NUM)
 			{
-				SymbolInfo *sym = new SymbolInfo;
+				SymbolInfo *sym = NewSymbol();
 				sym->type = SymbolInfo::NUM;
 				sym->value = node->data->value;
 				result = sym;
 			}
 			else if (node->data->type == LexComponent::TXT)
 			{
-				SymbolInfo *sym = new SymbolInfo;
+				SymbolInfo *sym = NewSymbol();
 				sym->type = SymbolInfo::TXT;
 				sym->text = new string;
 				*sym->text = node->data->token;
@@ -391,14 +400,14 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 			{
 				if (node->data->token == "true" || node->data->token == "false")
 				{
-					SymbolInfo *sym = new SymbolInfo;
+					SymbolInfo *sym = NewSymbol();
 					sym->type = SymbolInfo::BOOL;
 					sym->flag = (node->data->token == "true");
 					result = sym;
 				}
 				else if (node->data->token == "null")
 				{
-					SymbolInfo *sym = new SymbolInfo;
+					SymbolInfo *sym = NewSymbol();
 					sym->type = SymbolInfo::NIL;
 					result = sym;
 				}
@@ -527,16 +536,18 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 		assert(node->count == 3);
 		SymbolInfo *sym = Evaluate(*++it);
 		assert(sym != NULL);
-		sym = sym->Copy();
+		ReleaseSymbol(sym);
+		sym = CopySymbol(sym);
 
 		assert(variable->data->type == LexComponent::STR);
 		sym->name = variable->data->token;
 
 		currentEnvironment.front()->AddSymbol(sym);
+		ReleaseSymbol(sym);
 	}
 	else // function define
 	{
-		SymbolInfo *sym = new SymbolInfo;
+		SymbolInfo *sym = NewSymbol();
 		sym->type = SymbolInfo::FUN;
 		sym->func = new FunctionInfo;
 		sym->name = "lambda";
@@ -558,6 +569,7 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 		{
 			currentEnvironment.front()->AddSymbol(sym);
 			sym->func->env->AddSymbol(sym);
+			ReleaseSymbol(sym);
 		}
 		else if (op == "lambda")
 		{
@@ -582,6 +594,9 @@ SymbolInfo* Interpreter::Assign(SyntaxComponent *node)
 
 	sym->type = result->type;
 	sym->value = result->value;
+
+	ReleaseSymbol(sym);
+	ReleaseSymbol(result);
 
 	return NULL;
 }
@@ -613,7 +628,7 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 		assert(sym != NULL && (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA));
 	}
 
-	if (debug)
+	if (debug & Interpreter::DEBUG_FUNC_CALL)
 	{
 		cout << "calling " << sym->name << endl;
 	}
@@ -621,6 +636,7 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	EnvironmentInfo *env = new EnvironmentInfo;
 	env->head = sym->func->env->head;
 	env->name = sym->name;
+	tmpEnvironment.push_front(env); // for garbage collection
 
 	SyntaxComponent *function = sym->func->body;
 	auto fIt = function->children->begin();
@@ -631,12 +647,14 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	{
 		++pIt; // skip function name
 	}
+	ReleaseSymbol(sym);
 
 	while (++it != node->children->end() && pIt != (*fIt)->children->end())
 	{
 		tmp = Evaluate(*it);
 		assert(tmp != NULL);
-		tmp = tmp->Copy();
+		ReleaseSymbol(tmp);
+		tmp = CopySymbol(tmp);
 
 		LexComponent *parameter = (*pIt)->data;
 		assert((*pIt)->count == 0 && parameter->type == LexComponent::STR);
@@ -644,13 +662,16 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 		++pIt;
 		
 		env->AddSymbol(tmp);
+		ReleaseSymbol(tmp);
 	}
 	assert(it == node->children->end() && pIt == (*fIt)->children->end());
 
 	// handle function body
+	assert(env == tmpEnvironment.front());
+	tmpEnvironment.pop_front();
 	currentEnvironment.push_front(env);
 
-	if (debug)
+	if (debug & Interpreter::DEBUG_FUNC_CALL)
 	{
 		currentEnvironment.front()->Print();
 	}
@@ -661,6 +682,7 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	while (*fIt != function->children->back())
 	{
 		result = Evaluate(*fIt);
+		ReleaseSymbol(result);
 		++fIt;
 	}
 	lastResult = *fIt;
@@ -674,12 +696,13 @@ SymbolInfo* Interpreter::Arithmetic(SyntaxComponent *node)
 	auto it = node->children->begin();
 	string op = (*it)->data->token;
 
-	SymbolInfo *tmp, *result = new SymbolInfo;
+	SymbolInfo *tmp, *result = NewSymbol();
 	result->type = SymbolInfo::NUM;
 
 	tmp = Evaluate(*++it);
 	assert(tmp != NULL && tmp->type == SymbolInfo::NUM);
 	result->value = tmp->value;
+	ReleaseSymbol(tmp);
 
 	while (++it != node->children->end())
 	{
@@ -707,6 +730,7 @@ SymbolInfo* Interpreter::Arithmetic(SyntaxComponent *node)
 			assert(node->count == 3);
 			result->value = int(result->value) % int(tmp->value);
 		}
+		ReleaseSymbol(tmp);
 	}
 	return result;
 }
@@ -716,7 +740,7 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 	auto it = node->children->begin();
 	string op = (*it)->data->token;
 
-	SymbolInfo *result = new SymbolInfo;
+	SymbolInfo *result = NewSymbol();
 	result->type = SymbolInfo::BOOL;
 
 	if (op == ">" || op == "<" || op == "=")
@@ -740,6 +764,8 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 		{
 			result->flag =  (first->value == second->value);
 		}
+		ReleaseSymbol(first);
+		ReleaseSymbol(second);
 	}
 	else if (op == "and" || op == "or")
 	{
@@ -748,6 +774,7 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 		SymbolInfo *tmp = Evaluate(*++it);
 		assert(tmp != NULL && tmp->type == SymbolInfo::BOOL);
 		result->flag = tmp->flag;
+		ReleaseSymbol(tmp);
 
 		while (++it != node->children->end())
 		{
@@ -767,6 +794,7 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 			{
 				result->flag = result->flag || tmp->flag;
 			}
+			ReleaseSymbol(tmp);
 		}
 
 	}
@@ -778,6 +806,7 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 		assert(first != NULL && first->type == SymbolInfo::BOOL);
 
 		result->flag = !first;
+		ReleaseSymbol(first);
 	}
 	return result;
 }
@@ -812,11 +841,12 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 		{
 			lastResult = *++it;
 		}
+		ReleaseSymbol(first);
 	}
 	else if (op == "cond")
 	{
 		assert(node->count >= 2);
-		SymbolInfo *flag;
+		SymbolInfo *sym;
 
 		while (++it != node->children->end())
 		{
@@ -825,14 +855,16 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 
 			if (line->children->front()->count > 0) // normal condition
 			{
-				flag = Evaluate(line->children->front());
-				assert(flag != NULL && flag->type == SymbolInfo::BOOL);
+				sym = Evaluate(line->children->front());
+				assert(sym != NULL && sym->type == SymbolInfo::BOOL);
 
-				if (flag->flag)
+				if (sym->flag)
 				{
 					lastResult = line->children->back();
+					ReleaseSymbol(sym);
 					break;
 				}
+				ReleaseSymbol(sym);
 			}
 			else // else condition
 			{
@@ -877,6 +909,7 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 		sym->name = variable->data->token;
 
 		currentEnvironment.front()->AddSymbol(sym);
+		ReleaseSymbol(sym);
 	}
 	
 	while (++it != node->children->end())
@@ -902,10 +935,13 @@ SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
 		SymbolInfo *first = Evaluate(*++it);
 		SymbolInfo *second = Evaluate(*++it);
 
-		result = new SymbolInfo;
+		result = NewSymbol();
+		result->name = "pair";
 		result->type = SymbolInfo::PAIR;
-		result->pdata[0] = first;
-		result->pdata[1] = second;
+		result->pdata[0] = CopySymbol(first);
+		result->pdata[1] = CopySymbol(second);
+		ReleaseSymbol(first);
+		ReleaseSymbol(second);
 	}
 	else if (op == "car")
 	{
@@ -913,6 +949,7 @@ SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
 		SymbolInfo *sym = Evaluate(*++it);
 		assert(sym != NULL && sym->type == SymbolInfo::PAIR);
 		result = sym->pdata[0];
+		ReleaseSymbol(sym);
 	}
 	else if (op == "cdr")
 	{
@@ -920,6 +957,7 @@ SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
 		SymbolInfo *sym = Evaluate(*++it);
 		assert(sym != NULL && sym->type == SymbolInfo::PAIR);
 		result = sym->pdata[1];
+		ReleaseSymbol(sym);
 	}
 	else if (op == "pair?")
 	{
@@ -927,9 +965,10 @@ SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
 		SymbolInfo *sym = Evaluate(*++it);
 		assert(sym != NULL);
 
-		result = new SymbolInfo;
+		result = NewSymbol();
 		result->type = SymbolInfo::BOOL;
 		result->flag = (sym->type == SymbolInfo::PAIR);
+		ReleaseSymbol(sym);
 	}
 	return result;
 }
@@ -946,14 +985,15 @@ SymbolInfo* Interpreter::List(SyntaxComponent *node)
 		SymbolInfo *sym = Evaluate(*++it);
 		assert(sym != NULL);
 
-		result = new SymbolInfo;
+		result = NewSymbol();
 		result->type = SymbolInfo::BOOL;
 		result->flag = (sym->type == SymbolInfo::NIL);
+		ReleaseSymbol(sym);
 	}
 	else if (op == "list")
 	{
 		SymbolInfo **last = &result;
-		SymbolInfo *tail = new SymbolInfo;
+		SymbolInfo *tail = NewSymbol();
 		tail->type = SymbolInfo::NIL;
 
 		while (++it != node->children->end())
@@ -961,9 +1001,12 @@ SymbolInfo* Interpreter::List(SyntaxComponent *node)
 			SymbolInfo *sym = Evaluate(*it);
 			assert(sym != NULL);
 
-			(*last) = new SymbolInfo;
+			(*last) = NewSymbol();
 			(*last)->type = SymbolInfo::PAIR;
-			(*last)->pdata[0] = sym;
+			(*last)->name = "pair";
+			(*last)->pdata[0] = CopySymbol(sym);
+			ReleaseSymbol(sym);
+
 			last = &(*last)->pdata[1];
 		}
 		(*last) = tail;
@@ -997,6 +1040,7 @@ SymbolInfo* Interpreter::MiscFunc(SyntaxComponent *node)
 			{
 				cout << "wrong parameter for display" << endl;
 			}
+			ReleaseSymbol(sym);
 		}
 	}
 	else if (op == "newline")
@@ -1010,12 +1054,161 @@ SymbolInfo* Interpreter::MiscFunc(SyntaxComponent *node)
 		SymbolInfo *sym = Evaluate(*++it);
 		assert(sym != NULL && sym->type == SymbolInfo::NUM);
 
-		result = new SymbolInfo;
+		result = NewSymbol();
 		result->type = SymbolInfo::NUM;
 		result->value = int(rand() * sym->value);
+		ReleaseSymbol(sym);
 	}
 
 	return result;
+}
+
+SymbolInfo* Interpreter::CopySymbol(SymbolInfo *sym)
+{
+	SymbolInfo *result = NewSymbol();
+	result->type = sym->type;
+	result->name = sym->name;
+	result->value = sym->value;
+	result->next = sym->next;
+
+	if (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA)
+	{
+		result->func = new FunctionInfo;
+		result->func->parameter = sym->func->parameter;
+		result->func->body = sym->func->body;
+		result->func->env = new EnvironmentInfo;
+		result->func->env->head = sym->func->env->head;
+	}
+	else if (sym->type == SymbolInfo::TXT)
+	{
+		result->text = new string;
+		*result->text = *sym->text;
+	}
+
+	return result;
+}
+
+SymbolInfo* Interpreter::NewSymbol()
+{
+	SymbolInfo *result = new SymbolInfo;
+	result->useState = SymbolInfo::TO_USE;
+	symbolRecord.push_back(result);
+	return result;
+}
+
+void Interpreter::ReleaseSymbol(SymbolInfo *sym)
+{
+	if (sym != NULL)
+	{
+		sym->useState = SymbolInfo::NOT_USE;
+	}
+}
+
+void Interpreter::CheckSymbols()
+{
+	for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
+	{
+		if ((*it)->useState != SymbolInfo::TO_USE) // return value, local variable still in use, etc
+		{
+			(*it)->useState = SymbolInfo::NOT_USE;
+		}
+	}
+
+	if (debug & Interpreter::DEBUG_SYMBOL_MARK)
+	{
+		cout << "==start symbol mark==" << endl;
+	}
+
+	for (auto eIt=currentEnvironment.begin(); eIt != currentEnvironment.end(); ++eIt)
+	{
+		MarkEnvironment(*eIt, "");
+	}
+
+	for (auto eIt2=tmpEnvironment.begin(); eIt2 != tmpEnvironment.end(); ++eIt2)
+	{
+		MarkEnvironment(*eIt2, "tmp");
+	}
+
+	if (debug & Interpreter::DEBUG_SYMBOL_MARK)
+	{
+		cout << "==end symbol mark==" << endl;
+	}
+}
+
+void Interpreter::MarkEnvironment(EnvironmentInfo *env, string prefix)
+{
+	SymbolInfo *sym = env->head;
+	while (sym != NULL)
+	{
+		MarkSymbol(sym, prefix + "." + env->name);
+		sym = sym->next;
+	}
+}
+
+void Interpreter::MarkSymbol(SymbolInfo *sym, string prefix)
+{
+	assert(sym != NULL);
+	if (sym->useState == SymbolInfo::NOT_USE) // avoid repertitive mark operation
+	{
+		if (debug & Interpreter::DEBUG_SYMBOL_MARK)
+		{
+			cout << "  " << prefix << ".";
+			sym->Print();
+		}
+
+		sym->useState = SymbolInfo::IN_TABLE;
+
+		if (sym->type == SymbolInfo::PAIR)
+		{
+			MarkSymbol(sym->pdata[0], prefix + "." + sym->name);
+			MarkSymbol(sym->pdata[1], prefix + "." + sym->name);
+		}
+		else if (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA)
+		{
+			MarkEnvironment(sym->func->env, prefix);
+		}
+	}
+}
+
+void Interpreter::ClearSymbols(bool force)
+{
+	int clearSymbolCount = 0, totalSymbolCount = symbolRecord.size();
+
+	for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
+	{
+		if ((*it)->useState == SymbolInfo::NOT_USE || force)
+		{
+			if ((*it)->type == SymbolInfo::FUN || (*it)->type == SymbolInfo::LAMBDA)
+			{
+				delete((*it)->func->env);
+				delete (*it)->func;
+			}
+			else if ((*it)->type == SymbolInfo::TXT)
+			{
+				delete (*it)->text;
+			}
+			delete (*it);
+			(*it) = NULL;
+
+			++clearSymbolCount;
+		}
+	}
+	symbolRecord.remove(NULL);
+
+	float clearRatio = float(clearSymbolCount) / totalSymbolCount;
+	if (clearRatio < 0.25) // adjust garbage collection threshold dynamically
+	{
+		maxSymbolNum *= 2;
+	}
+	else if (clearRatio > 0.75)
+	{
+		maxSymbolNum /= 2;
+	}
+
+	if (debug & Interpreter::DEBUG_SYMBOL_CLEAR)
+	{
+		cout << "clear " << clearSymbolCount << " symbols, ratio: " << clearRatio * 100 << "%" << endl;
+	}
 }
 
 int main(int argc, char **argv)
@@ -1029,7 +1222,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	src_file = "test/accumulate.rkt";
+	//src_file = "test/test.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1050,7 +1243,8 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	//vm.debug = true;
+	vm.debug = Interpreter::DEBUG_SYMBOL_CLEAR;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 
 	syntax.ClearTree();
