@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <forward_list>
 #include <set>
 using namespace std;
 
@@ -112,6 +113,7 @@ public:
 		DEBUG_FUNC_CALL = 1,
 		DEBUG_SYMBOL_MARK = 1 << 1,
 		DEBUG_SYMBOL_CLEAR = 1 << 2,
+		DEBUG_CALC_TIME = 1 << 3,
 	};
 
 	Interpreter():debug(0), maxSymbolNum(128){};
@@ -138,10 +140,15 @@ private:
 	void MarkEnvironment(EnvironmentInfo *env, string prefix);
 	void MarkSymbol(SymbolInfo *sym, string prefix);
 	void ClearSymbols(bool force = false);
-	unsigned int maxSymbolNum;
+	int maxSymbolNum;
 
 	SyntaxComponent *lastResult;
 	list<EnvironmentInfo*> currentEnvironment;
 	list<EnvironmentInfo*> tmpEnvironment;
-	list<SymbolInfo*> symbolRecord;
+	forward_list<SymbolInfo*> symbolRecord;
+	int symbolRecordSize;
+
+	double totalTime;
+	double markTime;
+	double clearTime;
 };

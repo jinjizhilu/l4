@@ -314,10 +314,14 @@ void Interpreter::Run(SyntaxComponent *tree)
 {
 	assert(tree->count > 0);
 
+	totalTime = markTime = clearTime = 0;
+	clock_t startTime = clock();
+
 	srand(unsigned int(time(NULL)));
 	currentEnvironment.push_front(new EnvironmentInfo);
 	currentEnvironment.front()->name = "global";
 	lastResult = NULL;
+	symbolRecordSize = 0;
 
 	for (auto it=tree->children->begin(); it != tree->children->end(); ++it)
 	{
@@ -350,10 +354,23 @@ void Interpreter::Run(SyntaxComponent *tree)
 		ReleaseSymbol(result);
 	}
 
+	if (debug | DEBUG_CALC_TIME)
+	{
+		printf("clear time 1: %.4lf\n", clearTime);
+	}
+
 	delete currentEnvironment.front();
 	currentEnvironment.pop_front();
 
 	ClearSymbols(true);
+	totalTime = double(clock() - startTime) / CLOCKS_PER_SEC;
+
+	if (debug | DEBUG_CALC_TIME)
+	{
+		printf("total time: %.4lf\n", totalTime);
+		printf("mark time: %.4lf\n", markTime);
+		printf("clear time: %.4lf\n", clearTime);
+	}
 }
 
 SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
@@ -364,7 +381,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 
 	while (flag)
 	{
-		if (symbolRecord.size() > maxSymbolNum) // garbage collection
+		if (symbolRecordSize > maxSymbolNum) // garbage collection
 		{
 			CheckSymbols();
 			ClearSymbols();
@@ -1092,7 +1109,8 @@ SymbolInfo* Interpreter::NewSymbol()
 {
 	SymbolInfo *result = new SymbolInfo;
 	result->useState = SymbolInfo::TO_USE;
-	symbolRecord.push_back(result);
+	symbolRecord.push_front(result);
+	++symbolRecordSize;
 	return result;
 }
 
@@ -1106,6 +1124,8 @@ void Interpreter::ReleaseSymbol(SymbolInfo *sym)
 
 void Interpreter::CheckSymbols()
 {
+	clock_t startTime = clock();
+
 	for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
 	{
 		if ((*it)->useState != SymbolInfo::TO_USE) // return value, local variable still in use, etc
@@ -1133,6 +1153,8 @@ void Interpreter::CheckSymbols()
 	{
 		cout << "==end symbol mark==" << endl;
 	}
+
+	markTime += double(clock() - startTime) / CLOCKS_PER_SEC;
 }
 
 void Interpreter::MarkEnvironment(EnvironmentInfo *env, string prefix)
@@ -1172,7 +1194,8 @@ void Interpreter::MarkSymbol(SymbolInfo *sym, string prefix)
 
 void Interpreter::ClearSymbols(bool force)
 {
-	int clearSymbolCount = 0, totalSymbolCount = symbolRecord.size();
+	clock_t startTime = clock();
+	int clearSymbolCount = 0;
 
 	for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
 	{
@@ -1193,9 +1216,17 @@ void Interpreter::ClearSymbols(bool force)
 			++clearSymbolCount;
 		}
 	}
-	symbolRecord.remove(NULL);
 
-	float clearRatio = float(clearSymbolCount) / totalSymbolCount;
+	if (clearSymbolCount < symbolRecordSize)
+	{
+		symbolRecord.remove(NULL);
+	}
+	else
+	{
+		symbolRecord.clear();
+	}
+
+	float clearRatio = float(clearSymbolCount) / symbolRecordSize;
 	if (clearRatio < 0.25) // adjust garbage collection threshold dynamically
 	{
 		maxSymbolNum *= 2;
@@ -1204,11 +1235,13 @@ void Interpreter::ClearSymbols(bool force)
 	{
 		maxSymbolNum /= 2;
 	}
+	symbolRecordSize -= clearSymbolCount;
 
 	if (debug & Interpreter::DEBUG_SYMBOL_CLEAR)
 	{
 		cout << "clear " << clearSymbolCount << " symbols, ratio: " << clearRatio * 100 << "%" << endl;
 	}
+	clearTime += double(clock() - startTime) / CLOCKS_PER_SEC;
 }
 
 int main(int argc, char **argv)
@@ -1222,7 +1255,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	//src_file = "test/test.rkt";
+	src_file = "test/test.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1243,7 +1276,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = Interpreter::DEBUG_SYMBOL_CLEAR;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	vm.debug = Interpreter::DEBUG_CALC_TIME;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
 	for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 
