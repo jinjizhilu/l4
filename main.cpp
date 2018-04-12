@@ -1150,6 +1150,12 @@ void Interpreter::ReleaseSymbol(SymbolInfo *sym)
 	if (sym != NULL)
 	{
 		sym->useState = SymbolInfo::NOT_USE;
+
+		if (sym->type == SymbolInfo::PAIR)
+		{
+			ReleaseSymbol(sym->pdata[0]);
+			ReleaseSymbol(sym->pdata[1]);
+		}
 	}
 }
 
