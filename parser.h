@@ -9,6 +9,8 @@ using namespace std;
 
 const char* l4_keys[] = {"+", "-", "*", "/", "%", ">", "<", "=", "and", "or", "not", "define", "lambda", "set!", "let", "if", "cond", "else", "true", "false", "cons", "car", "cdr", "pair?", "list", "null", "null?", "display", "newline", "random"};
 
+const int SYMBOL_TABLE_MIN_SIZE = 256;
+
 struct LexComponent
 {
 	enum {NUM, STR, KEY, TXT};
@@ -90,7 +92,7 @@ struct SymbolInfo
 
 	SymbolInfo *next;
 
-	enum {NOT_USE, IN_TABLE, TO_USE};
+	enum {NOT_USE, IN_TABLE, TO_USE, EMPTY};
 	int useState;
 };
 
@@ -116,7 +118,7 @@ public:
 		DEBUG_CALC_TIME = 1 << 3,
 	};
 
-	Interpreter():debug(0), maxSymbolNum(128){};
+	Interpreter():debug(0), symbolNumThreshold(SYMBOL_TABLE_MIN_SIZE){};
 	void Run(SyntaxComponent *tree);
 	int debug;
 
@@ -140,13 +142,14 @@ private:
 	void MarkEnvironment(EnvironmentInfo *env, string prefix);
 	void MarkSymbol(SymbolInfo *sym, string prefix);
 	void ClearSymbols(bool force = false);
-	int maxSymbolNum;
+	int symbolNumThreshold;
 
 	SyntaxComponent *lastResult;
 	list<EnvironmentInfo*> currentEnvironment;
 	list<EnvironmentInfo*> tmpEnvironment;
 	forward_list<SymbolInfo*> symbolRecord;
 	int symbolRecordSize;
+	int emptySymbolSize;
 
 	double totalTime;
 	double markTime;

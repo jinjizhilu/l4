@@ -321,7 +321,9 @@ void Interpreter::Run(SyntaxComponent *tree)
 	currentEnvironment.push_front(new EnvironmentInfo);
 	currentEnvironment.front()->name = "global";
 	lastResult = NULL;
+	symbolNumThreshold = SYMBOL_TABLE_MIN_SIZE;
 	symbolRecordSize = 0;
+	emptySymbolSize = 0;
 	collectCount = 0;
 
 	for (auto it=tree->children->begin(); it != tree->children->end(); ++it)
@@ -361,7 +363,7 @@ void Interpreter::Run(SyntaxComponent *tree)
 	ClearSymbols(true);
 	totalTime = double(clock() - startTime) / CLOCKS_PER_SEC;
 
-	if (debug | DEBUG_CALC_TIME)
+	if (debug & DEBUG_CALC_TIME)
 	{
 		printf("total time: %.4lf\n", totalTime);
 		printf("mark time: %.4lf\n", markTime);
@@ -379,7 +381,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 
 	while (flag)
 	{
-		if (symbolRecordSize > maxSymbolNum) // garbage collection
+		if (symbolRecordSize > symbolNumThreshold) // garbage collection
 		{
 			CheckSymbols();
 			ClearSymbols();
@@ -522,20 +524,17 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 				}
 			}
 		}
-		if (!envToDelete.empty())
+		for (auto eIt=envToDelete.begin(); eIt != envToDelete.end(); ++eIt)
 		{
-			for (auto eIt=envToDelete.begin(); eIt != envToDelete.end(); ++eIt)
+			if ((*eIt) != currentEnvironment.front())
 			{
-				if ((*eIt) != currentEnvironment.front())
-				{
-					--envCount;
-					currentEnvironment.remove(*eIt);
-					delete (*eIt);
-					(*eIt) = NULL;
-				}
+				--envCount;
+				currentEnvironment.remove(*eIt);
+				delete (*eIt);
+				(*eIt) = NULL;
 			}
-			envToDelete.remove(NULL);
 		}
+		envToDelete.remove(NULL);
 	}
 	for (int i=0; i<envCount; ++i)
 	{
@@ -1121,10 +1120,28 @@ SymbolInfo* Interpreter::CopySymbol(SymbolInfo *sym)
 
 SymbolInfo* Interpreter::NewSymbol()
 {
-	SymbolInfo *result = new SymbolInfo;
+	SymbolInfo *result = NULL;
+
+	if (emptySymbolSize > 0)
+	{
+		for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
+		{
+			if ((*it)->useState == SymbolInfo::EMPTY)
+			{
+				result = (*it);
+				--emptySymbolSize;
+				break;
+			}
+		}
+		assert(result != NULL);
+	}
+	else
+	{
+		result = new SymbolInfo;
+		symbolRecord.push_front(result);
+		++symbolRecordSize;
+	}
 	result->useState = SymbolInfo::TO_USE;
-	symbolRecord.push_front(result);
-	++symbolRecordSize;
 	return result;
 }
 
@@ -1142,7 +1159,7 @@ void Interpreter::CheckSymbols()
 
 	for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
 	{
-		if ((*it)->useState != SymbolInfo::TO_USE) // return value, local variable still in use, etc
+		if ((*it)->useState != SymbolInfo::TO_USE && (*it)->useState != SymbolInfo::EMPTY) // return value, local variable still in use, etc
 		{
 			(*it)->useState = SymbolInfo::NOT_USE;
 		}
@@ -1218,10 +1235,15 @@ void Interpreter::MarkSymbol(SymbolInfo *sym, string prefix)
 void Interpreter::ClearSymbols(bool force)
 {
 	clock_t startTime = clock();
-	int clearSymbolCount = 0;
+	emptySymbolSize = 0;
 
 	for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
 	{
+		if ((*it)->useState == SymbolInfo::EMPTY)
+		{
+			++emptySymbolSize;
+			continue;
+		}
 		if ((*it)->useState == SymbolInfo::NOT_USE || force)
 		{
 			if ((*it)->type == SymbolInfo::FUN || (*it)->type == SymbolInfo::LAMBDA)
@@ -1233,36 +1255,34 @@ void Interpreter::ClearSymbols(bool force)
 			{
 				delete (*it)->text;
 			}
-			delete (*it);
-			(*it) = NULL;
-
-			++clearSymbolCount;
+			++emptySymbolSize;
+			(*it)->useState = SymbolInfo::EMPTY;
 		}
 	}
 
-	if (clearSymbolCount < symbolRecordSize)
+	if (force)
 	{
-		symbolRecord.remove(NULL);
-	}
-	else
-	{
+		for (auto sIt=symbolRecord.begin(); sIt != symbolRecord.end(); ++sIt)
+		{
+			delete (*sIt);
+		}
 		symbolRecord.clear();
+		emptySymbolSize = symbolRecordSize = 0;
 	}
 
-	float clearRatio = float(clearSymbolCount) / symbolRecordSize;
-	if (clearRatio < 0.3) // adjust garbage collection threshold dynamically
+	float clearRatio = float(emptySymbolSize) / symbolRecordSize;
+	if (clearRatio < 0.3 || symbolNumThreshold < SYMBOL_TABLE_MIN_SIZE) // adjust garbage collection threshold dynamically
 	{
-		maxSymbolNum *= 2;
+		symbolNumThreshold *= 2;
 	}
-	else if (clearRatio > 0.7)
+	else if (clearRatio > 0.7 && symbolNumThreshold >= SYMBOL_TABLE_MIN_SIZE)
 	{
-		maxSymbolNum /= 2;
+		symbolNumThreshold /= 2;
 	}
-	symbolRecordSize -= clearSymbolCount;
 
 	if (debug & Interpreter::DEBUG_SYMBOL_CLEAR)
 	{
-		cout << "maxSymbolNum: " << maxSymbolNum << " clear " << clearSymbolCount << " symbols, ratio: " << clearRatio * 100 << "%" << endl;
+		cout << "maxSymbolNum: " << symbolNumThreshold << ", clear " << emptySymbolSize << " symbols, ratio: " << clearRatio * 100 << "%" << endl;
 	}
 	clearTime += double(clock() - startTime) / CLOCKS_PER_SEC;
 }
@@ -1278,7 +1298,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	//src_file = "test/accumulate.rkt";
+	src_file = "test/accumulate.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1299,7 +1319,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = Interpreter::DEBUG_CALC_TIME;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	vm.debug = Interpreter::DEBUG_CALC_TIME;// | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
 	for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 
