@@ -354,11 +354,6 @@ void Interpreter::Run(SyntaxComponent *tree)
 		ReleaseSymbol(result);
 	}
 
-	if (debug | DEBUG_CALC_TIME)
-	{
-		printf("clear time 1: %.4lf\n", clearTime);
-	}
-
 	delete currentEnvironment.front();
 	currentEnvironment.pop_front();
 
@@ -378,6 +373,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 	bool flag = true;
 	SymbolInfo *result = NULL;
 	int envCount = 0;
+	list<EnvironmentInfo*> envToDelete;
 
 	while (flag)
 	{
@@ -506,6 +502,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 						node = lastResult;
 						flag = true;
 						++envCount;
+						envToDelete.push_front(currentEnvironment.front());
 					}
 				}
 			}
@@ -519,8 +516,23 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 					node = lastResult;
 					flag = true;
 					++envCount;
+					envToDelete.push_front(currentEnvironment.front());
 				}
 			}
+		}
+		if (!envToDelete.empty())
+		{
+			for (auto eIt=envToDelete.begin(); eIt != envToDelete.end(); ++eIt)
+			{
+				if ((*eIt) != currentEnvironment.front())
+				{
+					--envCount;
+					currentEnvironment.remove(*eIt);
+					delete (*eIt);
+					(*eIt) = NULL;
+				}
+			}
+			envToDelete.remove(NULL);
 		}
 	}
 	for (int i=0; i<envCount; ++i)
@@ -1227,11 +1239,11 @@ void Interpreter::ClearSymbols(bool force)
 	}
 
 	float clearRatio = float(clearSymbolCount) / symbolRecordSize;
-	if (clearRatio < 0.25) // adjust garbage collection threshold dynamically
+	if (clearRatio < 0.4 || clearSymbolCount < 256) // adjust garbage collection threshold dynamically
 	{
 		maxSymbolNum *= 2;
 	}
-	else if (clearRatio > 0.75)
+	else if (clearRatio > 0.8 && clearSymbolCount >= 512)
 	{
 		maxSymbolNum /= 2;
 	}
@@ -1239,7 +1251,7 @@ void Interpreter::ClearSymbols(bool force)
 
 	if (debug & Interpreter::DEBUG_SYMBOL_CLEAR)
 	{
-		cout << "clear " << clearSymbolCount << " symbols, ratio: " << clearRatio * 100 << "%" << endl;
+		cout << "maxSymbolNum: " << maxSymbolNum << " clear " << clearSymbolCount << " symbols, ratio: " << clearRatio * 100 << "%" << endl;
 	}
 	clearTime += double(clock() - startTime) / CLOCKS_PER_SEC;
 }
@@ -1276,7 +1288,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = Interpreter::DEBUG_CALC_TIME;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	vm.debug = Interpreter::DEBUG_CALC_TIME;// | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
 	for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 
