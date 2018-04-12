@@ -9,7 +9,7 @@ using namespace std;
 
 const char* l4_keys[] = {"+", "-", "*", "/", "%", ">", "<", "=", "and", "or", "not", "define", "lambda", "set!", "let", "if", "cond", "else", "true", "false", "cons", "car", "cdr", "pair?", "list", "null", "null?", "display", "newline", "random"};
 
-const int SYMBOL_TABLE_MIN_SIZE = 256;
+const int SYMBOL_TABLE_MIN_SIZE = 128;
 
 struct LexComponent
 {

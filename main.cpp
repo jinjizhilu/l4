@@ -381,7 +381,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 
 	while (flag)
 	{
-		if (symbolRecordSize > symbolNumThreshold) // garbage collection
+		if (symbolRecordSize - emptySymbolSize > symbolNumThreshold) // garbage collection
 		{
 			CheckSymbols();
 			ClearSymbols();
@@ -1298,7 +1298,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	src_file = "test/accumulate.rkt";
+	//src_file = "test/accumulate.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1319,8 +1319,8 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = Interpreter::DEBUG_CALC_TIME;// | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
-	for (int i=0; i<10; ++i)
+	vm.debug = 0;//Interpreter::DEBUG_CALC_TIME;// | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	//for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 
 	syntax.ClearTree();
