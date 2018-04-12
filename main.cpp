@@ -60,7 +60,7 @@ void LexAnalyzer::Parse()
 
 			if (token == '-')
 			{
-				token = fin.peek();
+				token = fin.get();
 				negative = true;
 			}
 
@@ -1304,7 +1304,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	//src_file = "test/accumulate.rkt";
+	src_file = "test/integral.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
