@@ -151,4 +151,5 @@ private:
 	double totalTime;
 	double markTime;
 	double clearTime;
+	int collectCount;
 };

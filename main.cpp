@@ -322,6 +322,7 @@ void Interpreter::Run(SyntaxComponent *tree)
 	currentEnvironment.front()->name = "global";
 	lastResult = NULL;
 	symbolRecordSize = 0;
+	collectCount = 0;
 
 	for (auto it=tree->children->begin(); it != tree->children->end(); ++it)
 	{
@@ -365,6 +366,7 @@ void Interpreter::Run(SyntaxComponent *tree)
 		printf("total time: %.4lf\n", totalTime);
 		printf("mark time: %.4lf\n", markTime);
 		printf("clear time: %.4lf\n", clearTime);
+		printf("collect count: %d\n", collectCount);
 	}
 }
 
@@ -1166,6 +1168,7 @@ void Interpreter::CheckSymbols()
 		cout << "==end symbol mark==" << endl;
 	}
 
+	++collectCount;
 	markTime += double(clock() - startTime) / CLOCKS_PER_SEC;
 }
 
@@ -1174,7 +1177,11 @@ void Interpreter::MarkEnvironment(EnvironmentInfo *env, string prefix)
 	SymbolInfo *sym = env->head;
 	while (sym != NULL)
 	{
-		MarkSymbol(sym, prefix + "." + env->name);
+		if (debug & Interpreter::DEBUG_SYMBOL_MARK)
+		{
+			prefix += "." + sym->name;
+		}
+		MarkSymbol(sym, prefix);
 		sym = sym->next;
 	}
 }
@@ -1194,8 +1201,12 @@ void Interpreter::MarkSymbol(SymbolInfo *sym, string prefix)
 
 		if (sym->type == SymbolInfo::PAIR)
 		{
-			MarkSymbol(sym->pdata[0], prefix + "." + sym->name);
-			MarkSymbol(sym->pdata[1], prefix + "." + sym->name);
+			if (debug & Interpreter::DEBUG_SYMBOL_MARK)
+			{
+				prefix += "." + sym->name;
+			}
+			MarkSymbol(sym->pdata[0], prefix);
+			MarkSymbol(sym->pdata[1], prefix);
 		}
 		else if (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA)
 		{
@@ -1239,11 +1250,11 @@ void Interpreter::ClearSymbols(bool force)
 	}
 
 	float clearRatio = float(clearSymbolCount) / symbolRecordSize;
-	if (clearRatio < 0.4 || clearSymbolCount < 256) // adjust garbage collection threshold dynamically
+	if (clearRatio < 0.3) // adjust garbage collection threshold dynamically
 	{
 		maxSymbolNum *= 2;
 	}
-	else if (clearRatio > 0.8 && clearSymbolCount >= 512)
+	else if (clearRatio > 0.7)
 	{
 		maxSymbolNum /= 2;
 	}
@@ -1267,7 +1278,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	src_file = "test/test.rkt";
+	//src_file = "test/accumulate.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1288,7 +1299,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = Interpreter::DEBUG_CALC_TIME;// | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	vm.debug = Interpreter::DEBUG_CALC_TIME;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
 	for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 
