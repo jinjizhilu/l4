@@ -645,7 +645,6 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	auto it = node->children->begin();
 	SyntaxComponent *first = *it;
 
-	assert(first->count > 0);
 	sym = Evaluate(first);
 	assert(sym != NULL && (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA));
 
@@ -687,11 +686,11 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	}
 	assert(it == node->children->end() && pIt == (*fIt)->children->end());
 
-	// handle function body
 	assert(env == tmpEnvironment.front());
 	tmpEnvironment.pop_front();
 	currentEnvironment.push_front(env);
 
+	// handle function body
 	if (debug & Interpreter::DEBUG_FUNC_CALL)
 	{
 		currentEnvironment.front()->Print();
@@ -912,7 +911,7 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 	EnvironmentInfo *env = new EnvironmentInfo;
 	env->head = currentEnvironment.front()->head;
 	env->name = currentEnvironment.front()->name + ".let";
-	currentEnvironment.push_front(env);
+	tmpEnvironment.push_front(env); // for garbage collection
 
 	++it;
 	assert((*it)->count > 0);
@@ -929,10 +928,14 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 		SymbolInfo *sym = Evaluate(line->children->back());
 		sym->name = variable->data->token;
 
-		currentEnvironment.front()->AddSymbol(sym);
+		env->AddSymbol(sym);
 		ReleaseSymbol(sym);
 	}
 	
+	assert(env == tmpEnvironment.front());
+	tmpEnvironment.pop_front();
+	currentEnvironment.push_front(env);
+
 	while (++it != node->children->end())
 	{
 		result = Evaluate(*it);
