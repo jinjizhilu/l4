@@ -645,18 +645,9 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	auto it = node->children->begin();
 	SyntaxComponent *first = *it;
 
-	if (first->count == 0) // direct call by name
-	{
-		string funcName = first->data->token;
-		sym = currentEnvironment.front()->FindSymbol(funcName);
-		assert(sym != NULL && (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA));
-	}
-	else // call by lambda or function result
-	{
-		assert(first->count > 0);
-		sym = Evaluate(first);
-		assert(sym != NULL && (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA));
-	}
+	assert(first->count > 0);
+	sym = Evaluate(first);
+	assert(sym != NULL && (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA));
 
 	if (debug & Interpreter::DEBUG_FUNC_CALL)
 	{

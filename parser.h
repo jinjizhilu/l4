@@ -100,8 +100,8 @@ struct EnvironmentInfo
 {
 	EnvironmentInfo():head(NULL){}
 
-	SymbolInfo *head;
 	string name;
+	SymbolInfo *head;
 
 	void AddSymbol(SymbolInfo *sym);
 	SymbolInfo* FindSymbol(string name);
