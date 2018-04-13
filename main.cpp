@@ -968,10 +968,8 @@ SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
 		result = NewSymbol();
 		result->name = "pair";
 		result->type = SymbolInfo::PAIR;
-		result->pdata[0] = CopySymbol(first);
-		result->pdata[1] = CopySymbol(second);
-		ReleaseSymbol(first);
-		ReleaseSymbol(second);
+		result->pdata[0] = first;
+		result->pdata[1] = second;
 	}
 	else if (op == "car")
 	{
@@ -1034,8 +1032,7 @@ SymbolInfo* Interpreter::List(SyntaxComponent *node)
 			(*last) = NewSymbol();
 			(*last)->type = SymbolInfo::PAIR;
 			(*last)->name = "pair";
-			(*last)->pdata[0] = CopySymbol(sym);
-			ReleaseSymbol(sym);
+			(*last)->pdata[0] = sym;
 
 			last = &(*last)->pdata[1];
 		}
@@ -1304,7 +1301,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	src_file = "test/integral.rkt";
+	//src_file = "test/integral.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
