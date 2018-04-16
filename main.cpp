@@ -273,13 +273,13 @@ void SymbolInfo::Print()
 
 void EnvironmentInfo::AddSymbol(SymbolInfo *sym)
 {
-	sym->next = head;
-	head = sym;
+	sym->next = next;
+	next = sym;
 }
 
 SymbolInfo* EnvironmentInfo::FindSymbol(string name)
 {
-	SymbolInfo *p = head;
+	SymbolInfo *p = next;
 	while (p != NULL)
 	{
 		if (p->name == name)
@@ -288,6 +288,10 @@ SymbolInfo* EnvironmentInfo::FindSymbol(string name)
 		}
 		p = p->next;
 	}
+	if (p == NULL && parent != NULL)
+	{
+		p = parent->FindSymbol(name);
+	}
 	if (p == NULL)
 	{
 		cout << "unrecognized symbol: " << name << endl;
@@ -295,19 +299,31 @@ SymbolInfo* EnvironmentInfo::FindSymbol(string name)
 	return p;
 }
 
-void EnvironmentInfo::Print()
+void EnvironmentInfo::Print(bool topLevel)
 {
-	cout << "environment " << name << endl;
-	cout << "{" << endl;
+	if (topLevel)
+	{
+		cout << "environment " << name << endl;
+		cout << "{" << endl;
+	}
 
-	SymbolInfo *p = head;
+	SymbolInfo *p = next;
 	while (p != NULL)
 	{
 		cout << "\t";
 		p->Print();
 		p = p->next;
 	}
-	cout << "}" << endl;
+	if (parent != NULL)
+	{
+		cout << "\t====================" << endl;
+		parent->Print(false);
+	}
+
+	if (topLevel)
+	{
+		cout << "}" << endl;
+	}
 }
 
 void Interpreter::Run(SyntaxComponent *tree)
@@ -530,7 +546,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 			{
 				--envCount;
 				currentEnvironment.remove(*eIt);
-				delete (*eIt);
+				//delete (*eIt);
 				(*eIt) = NULL;
 			}
 		}
@@ -538,7 +554,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 	}
 	for (int i=0; i<envCount; ++i)
 	{
-		delete currentEnvironment.front();
+		//delete currentEnvironment.front();
 		currentEnvironment.pop_front();
 	}
 
@@ -590,7 +606,7 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 		}
 
 		EnvironmentInfo *env = new EnvironmentInfo;
-		env->head = currentEnvironment.front()->head;
+		env->parent = currentEnvironment.front();
 		env->name = sym->name;
 		sym->func->env = env;
 		sym->func->body = node;
@@ -598,7 +614,6 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 		if (op == "define")
 		{
 			currentEnvironment.front()->AddSymbol(sym);
-			sym->func->env->AddSymbol(sym);
 			ReleaseSymbol(sym);
 		}
 		else if (op == "lambda")
@@ -654,7 +669,8 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	}
 
 	EnvironmentInfo *env = new EnvironmentInfo;
-	env->head = sym->func->env->head;
+	env->next = sym->func->env->next;
+	env->parent = sym->func->env->parent;
 	env->name = sym->name;
 	tmpEnvironment.push_front(env); // for garbage collection
 
@@ -686,11 +702,11 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	}
 	assert(it == node->children->end() && pIt == (*fIt)->children->end());
 
+	// handle function body
 	assert(env == tmpEnvironment.front());
 	tmpEnvironment.pop_front();
 	currentEnvironment.push_front(env);
 
-	// handle function body
 	if (debug & Interpreter::DEBUG_FUNC_CALL)
 	{
 		currentEnvironment.front()->Print();
@@ -909,7 +925,7 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 	assert((*it)->data->token == "let");
 
 	EnvironmentInfo *env = new EnvironmentInfo;
-	env->head = currentEnvironment.front()->head;
+	env->parent = currentEnvironment.front();
 	env->name = currentEnvironment.front()->name + ".let";
 	tmpEnvironment.push_front(env); // for garbage collection
 
@@ -941,7 +957,6 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 		result = Evaluate(*it);
 	}
 
-	delete currentEnvironment.front();
 	currentEnvironment.pop_front();
 
 	return result;
@@ -1095,10 +1110,11 @@ SymbolInfo* Interpreter::CopySymbol(SymbolInfo *sym)
 	if (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA)
 	{
 		result->func = new FunctionInfo;
-		result->func->parameter = sym->func->parameter;
 		result->func->body = sym->func->body;
 		result->func->env = new EnvironmentInfo;
-		result->func->env->head = sym->func->env->head;
+		result->func->env->name = sym->func->env->name;
+		result->func->env->next = sym->func->env->next;
+		result->func->env->parent = sym->func->env->parent;
 	}
 	else if (sym->type == SymbolInfo::TXT)
 	{
@@ -1188,7 +1204,7 @@ void Interpreter::CheckSymbols()
 
 void Interpreter::MarkEnvironment(EnvironmentInfo *env, string prefix)
 {
-	SymbolInfo *sym = env->head;
+	SymbolInfo *sym = env->next;
 	while (sym != NULL)
 	{
 		if (debug & Interpreter::DEBUG_SYMBOL_MARK)
@@ -1197,6 +1213,10 @@ void Interpreter::MarkEnvironment(EnvironmentInfo *env, string prefix)
 		}
 		MarkSymbol(sym, prefix);
 		sym = sym->next;
+	}
+	if (env->parent != NULL)
+	{
+		MarkEnvironment(env->parent, prefix);
 	}
 }
 
@@ -1295,7 +1315,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	//src_file = "test/integral.rkt";
+	//src_file = "test/repeated.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1316,7 +1336,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = 0;//Interpreter::DEBUG_CALC_TIME;// | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	vm.debug = 0;//Interpreter::DEBUG_CALC_TIME | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
 	//for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 

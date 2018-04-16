@@ -67,7 +67,6 @@ struct EnvironmentInfo;
 
 struct FunctionInfo
 {
-	SyntaxComponent *parameter;
 	SyntaxComponent *body;
 	EnvironmentInfo *env;
 };
@@ -77,7 +76,7 @@ struct SymbolInfo
 	SymbolInfo():next(NULL){}
 	void Print();
 
-	enum {BOOL, NUM, TXT, PAIR, NIL, SYS, FUN, LAMBDA};
+	enum {BOOL, NUM, TXT, PAIR, NIL, SYS, FUN, LAMBDA, ENV};
 
 	int type;
 	string name;
@@ -96,16 +95,15 @@ struct SymbolInfo
 	int useState;
 };
 
-struct EnvironmentInfo
+struct EnvironmentInfo:public SymbolInfo
 {
-	EnvironmentInfo():head(NULL){}
+	EnvironmentInfo():parent(NULL){}
 
-	string name;
-	SymbolInfo *head;
+	EnvironmentInfo *parent;
 
 	void AddSymbol(SymbolInfo *sym);
 	SymbolInfo* FindSymbol(string name);
-	void Print();
+	void Print(bool topLevel = true);
 };
 
 class Interpreter
