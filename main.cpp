@@ -476,6 +476,14 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 					else if (op->token == "let")
 					{
 						result = Let(node);
+
+						if (lastResult != NULL)
+						{
+							node = lastResult;
+							flag = true;
+							++envCount;
+							envToDelete.push_front(currentEnvironment.front());
+						}
 					}
 					else if (op->token == "if" || op->token == "cond")
 					{
@@ -952,14 +960,18 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 	tmpEnvironment.pop_front();
 	currentEnvironment.push_front(env);
 
-	while (++it != node->children->end())
+	++it;
+	assert(it != node->children->end());
+
+	while (*it != node->children->back())
 	{
 		result = Evaluate(*it);
+		ReleaseSymbol(result);
+		++it;
 	}
+	lastResult = *it;
 
-	currentEnvironment.pop_front();
-
-	return result;
+	return NULL;
 }
 
 SymbolInfo* Interpreter::Pair(SyntaxComponent *node)
