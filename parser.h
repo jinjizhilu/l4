@@ -74,6 +74,7 @@ struct FunctionInfo
 struct SymbolInfo
 {
 	SymbolInfo():next(NULL){}
+	virtual ~SymbolInfo(){};
 	void Print();
 
 	enum {BOOL, NUM, TXT, PAIR, NIL, SYS, FUN, LAMBDA, ENV};
@@ -87,6 +88,7 @@ struct SymbolInfo
 		FunctionInfo* func;
 		string* text;
 		SymbolInfo* pdata[2];
+		EnvironmentInfo* parent;
 	};
 
 	SymbolInfo *next;
@@ -97,10 +99,6 @@ struct SymbolInfo
 
 struct EnvironmentInfo:public SymbolInfo
 {
-	EnvironmentInfo():parent(NULL){}
-
-	EnvironmentInfo *parent;
-
 	void AddSymbol(SymbolInfo *sym);
 	SymbolInfo* FindSymbol(string name);
 	void Print(bool topLevel = true);
@@ -114,6 +112,7 @@ public:
 		DEBUG_SYMBOL_MARK = 1 << 1,
 		DEBUG_SYMBOL_CLEAR = 1 << 2,
 		DEBUG_CALC_TIME = 1 << 3,
+		DEBUG_ENV_SYMBOL = 1 << 4,
 	};
 
 	Interpreter():debug(0), symbolNumThreshold(SYMBOL_TABLE_MIN_SIZE){};
@@ -135,6 +134,7 @@ private:
 
 	SymbolInfo* CopySymbol(SymbolInfo *sym);
 	SymbolInfo* NewSymbol();
+	EnvironmentInfo* NewEnvironment();
 	void ReleaseSymbol(SymbolInfo *sym);
 	void CheckSymbols();
 	void MarkEnvironment(EnvironmentInfo *env, string prefix);

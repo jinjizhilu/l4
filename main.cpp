@@ -333,14 +333,15 @@ void Interpreter::Run(SyntaxComponent *tree)
 	totalTime = markTime = clearTime = 0;
 	clock_t startTime = clock();
 
-	srand(unsigned int(time(NULL)));
-	currentEnvironment.push_front(new EnvironmentInfo);
-	currentEnvironment.front()->name = "global";
 	lastResult = NULL;
 	symbolNumThreshold = SYMBOL_TABLE_MIN_SIZE;
 	symbolRecordSize = 0;
 	emptySymbolSize = 0;
 	collectCount = 0;
+
+	srand(unsigned int(time(NULL)));
+	currentEnvironment.push_front(NewEnvironment());
+	currentEnvironment.front()->name = "global";
 
 	for (auto it=tree->children->begin(); it != tree->children->end(); ++it)
 	{
@@ -373,7 +374,6 @@ void Interpreter::Run(SyntaxComponent *tree)
 		ReleaseSymbol(result);
 	}
 
-	delete currentEnvironment.front();
 	currentEnvironment.pop_front();
 
 	ClearSymbols(true);
@@ -605,7 +605,7 @@ SymbolInfo* Interpreter::Define(SyntaxComponent *node)
 			sym->name = name->data->token;
 		}
 
-		EnvironmentInfo *env = new EnvironmentInfo;
+		EnvironmentInfo *env = NewEnvironment();
 		env->parent = currentEnvironment.front();
 		env->name = sym->name;
 		sym->func->env = env;
@@ -668,11 +668,11 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 		cout << "calling " << sym->name << endl;
 	}
 
-	EnvironmentInfo *env = new EnvironmentInfo;
+	EnvironmentInfo *env = NewEnvironment();
 	env->next = sym->func->env->next;
 	env->parent = sym->func->env->parent;
 	env->name = sym->name;
-	tmpEnvironment.push_front(env); // for garbage collection
+	tmpEnvironment.push_front(env);
 
 	SyntaxComponent *function = sym->func->body;
 	auto fIt = function->children->begin();
@@ -703,7 +703,7 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 	assert(it == node->children->end() && pIt == (*fIt)->children->end());
 
 	// handle function body
-	assert(env == tmpEnvironment.front());
+	assert(tmpEnvironment.front() == env);
 	tmpEnvironment.pop_front();
 	currentEnvironment.push_front(env);
 
@@ -924,10 +924,10 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 	auto it = node->children->begin();
 	assert((*it)->data->token == "let");
 
-	EnvironmentInfo *env = new EnvironmentInfo;
+	EnvironmentInfo *env = NewEnvironment();
 	env->parent = currentEnvironment.front();
 	env->name = currentEnvironment.front()->name + ".let";
-	tmpEnvironment.push_front(env); // for garbage collection
+	tmpEnvironment.push_front(env);
 
 	++it;
 	assert((*it)->count > 0);
@@ -948,7 +948,7 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 		ReleaseSymbol(sym);
 	}
 	
-	assert(env == tmpEnvironment.front());
+	assert(tmpEnvironment.front() == env);
 	tmpEnvironment.pop_front();
 	currentEnvironment.push_front(env);
 
@@ -1111,7 +1111,7 @@ SymbolInfo* Interpreter::CopySymbol(SymbolInfo *sym)
 	{
 		result->func = new FunctionInfo;
 		result->func->body = sym->func->body;
-		result->func->env = new EnvironmentInfo;
+		result->func->env = NewEnvironment();
 		result->func->env->name = sym->func->env->name;
 		result->func->env->next = sym->func->env->next;
 		result->func->env->parent = sym->func->env->parent;
@@ -1149,6 +1149,16 @@ SymbolInfo* Interpreter::NewSymbol()
 		++symbolRecordSize;
 	}
 	result->useState = SymbolInfo::TO_USE;
+	return result;
+}
+
+EnvironmentInfo* Interpreter::NewEnvironment()
+{
+	EnvironmentInfo *result = (EnvironmentInfo*)NewSymbol();
+	result->type = SymbolInfo::ENV;
+	result->next = NULL;
+	result->parent = NULL;
+	result->useState = SymbolInfo::NOT_USE;
 	return result;
 }
 
@@ -1204,26 +1214,35 @@ void Interpreter::CheckSymbols()
 
 void Interpreter::MarkEnvironment(EnvironmentInfo *env, string prefix)
 {
-	SymbolInfo *sym = env->next;
-	while (sym != NULL)
+	assert(env != NULL);
+	if (env->useState == SymbolInfo::NOT_USE || env->useState == SymbolInfo::TO_USE)
 	{
-		if (debug & Interpreter::DEBUG_SYMBOL_MARK)
+		if (env->useState == SymbolInfo::NOT_USE)
 		{
-			prefix += "." + sym->name;
+			env->useState = SymbolInfo::IN_TABLE;
 		}
-		MarkSymbol(sym, prefix);
-		sym = sym->next;
-	}
-	if (env->parent != NULL)
-	{
-		MarkEnvironment(env->parent, prefix);
+
+		SymbolInfo *sym = env->next;
+		while (sym != NULL)
+		{
+			if (debug & Interpreter::DEBUG_SYMBOL_MARK)
+			{
+				prefix += "." + sym->name;
+			}
+			MarkSymbol(sym, prefix);
+			sym = sym->next;
+		}
+		if (env->parent != NULL)
+		{
+			MarkEnvironment(env->parent, prefix);
+		}
 	}
 }
 
 void Interpreter::MarkSymbol(SymbolInfo *sym, string prefix)
 {
 	assert(sym != NULL);
-	if (sym->useState == SymbolInfo::NOT_USE) // avoid repertitive mark operation
+	if (sym->useState == SymbolInfo::NOT_USE || sym->useState == SymbolInfo::TO_USE) // avoid repertitive mark operation
 	{
 		if (debug & Interpreter::DEBUG_SYMBOL_MARK)
 		{
@@ -1231,7 +1250,10 @@ void Interpreter::MarkSymbol(SymbolInfo *sym, string prefix)
 			sym->Print();
 		}
 
-		sym->useState = SymbolInfo::IN_TABLE;
+		if (sym->useState == SymbolInfo::NOT_USE)
+		{
+			sym->useState = SymbolInfo::IN_TABLE;
+		}
 
 		if (sym->type == SymbolInfo::PAIR)
 		{
@@ -1253,6 +1275,7 @@ void Interpreter::ClearSymbols(bool force)
 {
 	clock_t startTime = clock();
 	emptySymbolSize = 0;
+	int envSymbolCount = 0;
 
 	for (auto it=symbolRecord.begin(); it != symbolRecord.end(); ++it)
 	{
@@ -1265,7 +1288,6 @@ void Interpreter::ClearSymbols(bool force)
 		{
 			if ((*it)->type == SymbolInfo::FUN || (*it)->type == SymbolInfo::LAMBDA)
 			{
-				delete((*it)->func->env);
 				delete (*it)->func;
 			}
 			else if ((*it)->type == SymbolInfo::TXT)
@@ -1274,6 +1296,10 @@ void Interpreter::ClearSymbols(bool force)
 			}
 			++emptySymbolSize;
 			(*it)->useState = SymbolInfo::EMPTY;
+		}
+		if ((*it)->type == SymbolInfo::ENV)
+		{
+			++envSymbolCount;
 		}
 	}
 
@@ -1301,6 +1327,10 @@ void Interpreter::ClearSymbols(bool force)
 	{
 		cout << "maxSymbolNum: " << symbolNumThreshold << ", clear " << emptySymbolSize << " symbols, ratio: " << clearRatio * 100 << "%" << endl;
 	}
+	if (debug & Interpreter::DEBUG_ENV_SYMBOL)
+	{
+		cout << "envSymbolNum: " << envSymbolCount << endl;
+	}
 	clearTime += double(clock() - startTime) / CLOCKS_PER_SEC;
 }
 
@@ -1315,7 +1345,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	//src_file = "test/repeated.rkt";
+	//src_file = "test/accumulate.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
@@ -1336,7 +1366,7 @@ int main(int argc, char **argv)
 	//syntax.PrintTree();
 
 	Interpreter vm;
-	vm.debug = 0;//Interpreter::DEBUG_CALC_TIME | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_CLEAR ;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
+	vm.debug = 0;//Interpreter::DEBUG_CALC_TIME;// | Interpreter::DEBUG_ENV_SYMBOL | Interpreter::DEBUG_SYMBOL_CLEAR;//Interpreter::DEBUG_SYMBOL_CLEAR | Interpreter::DEBUG_FUNC_CALL | Interpreter::DEBUG_SYMBOL_MARK;
 	//for (int i=0; i<10; ++i)
 	vm.Run(syntax.GetTree());
 
