@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <cstdio>
 #include <ctime>
 #include <cstdlib>
@@ -351,7 +352,7 @@ void Interpreter::Run(SyntaxComponent *tree)
 		{
 			if (result->type == SymbolInfo::NUM)
 			{
-				cout << result->value << endl;
+				cout << setprecision(10) << result->value << endl;
 			}
 			else if (result->type == SymbolInfo::BOOL)
 			{
@@ -485,7 +486,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 							envToDelete.push_front(currentEnvironment.front());
 						}
 					}
-					else if (op->token == "if" || op->token == "cond")
+					else if (op->token == "if" || op->token == "cond" || op->token == "begin")
 					{
 						result = Condition(node);
 
@@ -664,7 +665,7 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 
 	assert(node->count > 0);
 
-	SymbolInfo *sym, *tmp, *result = NULL;
+	SymbolInfo *sym, *tmp;
 	auto it = node->children->begin();
 	SyntaxComponent *first = *it;
 
@@ -725,8 +726,8 @@ SymbolInfo* Interpreter::Call(SyntaxComponent *node)
 
 	while (*fIt != function->children->back())
 	{
-		result = Evaluate(*fIt);
-		ReleaseSymbol(result);
+		tmp = Evaluate(*fIt);
+		ReleaseSymbol(tmp);
 		++fIt;
 	}
 	lastResult = *fIt;
@@ -866,18 +867,18 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 	//       ...
 	//       (else -1))
 
-	SymbolInfo *result = NULL;
+	SymbolInfo *tmp = NULL;
 	auto it = node->children->begin();
 	string op = (*it)->data->token;
 
 	if (op == "if")
 	{
 		assert(node->count == 4);
-		SymbolInfo *first = Evaluate(*++it);
-		assert(first != NULL && first->type == SymbolInfo::BOOL);
+		tmp = Evaluate(*++it);
+		assert(tmp != NULL && tmp->type == SymbolInfo::BOOL);
 
 		++it;
-		if (first->flag)
+		if (tmp->flag)
 		{
 			lastResult = *it;
 		}
@@ -885,12 +886,11 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 		{
 			lastResult = *++it;
 		}
-		ReleaseSymbol(first);
+		ReleaseSymbol(tmp);
 	}
 	else if (op == "cond")
 	{
 		assert(node->count >= 2);
-		SymbolInfo *sym;
 
 		while (++it != node->children->end())
 		{
@@ -899,16 +899,16 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 
 			if (line->children->front()->count > 0) // normal condition
 			{
-				sym = Evaluate(line->children->front());
-				assert(sym != NULL && sym->type == SymbolInfo::BOOL);
+				tmp = Evaluate(line->children->front());
+				assert(tmp != NULL && tmp->type == SymbolInfo::BOOL);
 
-				if (sym->flag)
+				if (tmp->flag)
 				{
 					lastResult = line->children->back();
-					ReleaseSymbol(sym);
+					ReleaseSymbol(tmp);
 					break;
 				}
-				ReleaseSymbol(sym);
+				ReleaseSymbol(tmp);
 			}
 			else // else condition
 			{
@@ -919,7 +919,20 @@ SymbolInfo* Interpreter::Condition(SyntaxComponent *node)
 			}
 		}
 	}
-	return result;
+	else if (op == "begin") // put begin here for convenience
+	{
+		++it;
+		assert(it != node->children->end());
+
+		while (*it != node->children->back())
+		{
+			tmp = Evaluate(*it);
+			ReleaseSymbol(tmp);
+			++it;
+		}
+		lastResult = *it;
+	}
+	return NULL;
 }
 
 SymbolInfo* Interpreter::Let(SyntaxComponent *node)
@@ -928,7 +941,7 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 	//       (v2 2))
 	//      (+ v1 v2))
 
-	SymbolInfo *result = NULL;
+	SymbolInfo *tmp = NULL;
 	auto it = node->children->begin();
 	assert((*it)->data->token == "let");
 
@@ -949,11 +962,11 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 		SyntaxComponent *variable = line->children->front();
 		assert(variable->count == 0 && variable->data->type == LexComponent::STR);
 
-		SymbolInfo *sym = Evaluate(line->children->back());
-		sym->name = variable->data->token;
+		tmp = Evaluate(line->children->back());
+		tmp->name = variable->data->token;
 
-		env->AddSymbol(sym);
-		ReleaseSymbol(sym);
+		env->AddSymbol(tmp);
+		ReleaseSymbol(tmp);
 	}
 	
 	assert(tmpEnvironment.front() == env);
@@ -965,8 +978,8 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 
 	while (*it != node->children->back())
 	{
-		result = Evaluate(*it);
-		ReleaseSymbol(result);
+		tmp = Evaluate(*it);
+		ReleaseSymbol(tmp);
 		++it;
 	}
 	lastResult = *it;
@@ -1357,7 +1370,7 @@ int main(int argc, char **argv)
 	LexAnalyzer lex;
 	string lib_file("l4.lib");
 	string src_file(argv[1]);
-	//src_file = "test/accumulate.rkt";
+	//src_file = "test/test.rkt";
 	
 	for (size_t i=0; i<sizeof(l4_keys)/4; ++i)
 	{
