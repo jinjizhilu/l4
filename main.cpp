@@ -258,7 +258,7 @@ void SymbolInfo::Print()
 	case SymbolInfo::NUM:
 		cout << " = " << value << endl; break;
 	case SymbolInfo::TXT:
-		cout << " = " << *(text) << endl; break;
+		cout << " = " << text->data << endl; break;
 	case SymbolInfo::FUN:
 		cout << " = FUNC" << endl; break;
 	case SymbolInfo::LAMBDA:
@@ -420,8 +420,8 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 			{
 				SymbolInfo *sym = NewSymbol();
 				sym->type = SymbolInfo::TXT;
-				sym->text = new string;
-				*sym->text = node->data->token;
+				sym->text = new TextInfo;
+				sym->text->data = node->data->token;
 				result = sym;
 			}
 			else if (node->data->type == LexComponent::STR)
@@ -500,7 +500,7 @@ SymbolInfo* Interpreter::Evaluate(SyntaxComponent *node)
 					{
 						result = Arithmetic(node);
 					}
-					else if (op->token == ">" || op->token == "<" || op->token == "=" || op->token == "and" || op->token == "or" || op->token == "not")
+					else if (op->token == ">" || op->token == "<" || op->token == "=" || op->token == "and" || op->token == "or" || op->token == "not" || op->token == "eq?")
 					{
 						result = Logic(node);
 					}
@@ -788,7 +788,7 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 	SymbolInfo *result = NewSymbol();
 	result->type = SymbolInfo::BOOL;
 
-	if (op == ">" || op == "<" || op == "=")
+	if (op == ">" || op == "<" || op == "=" || op == "eq?")
 	{
 		assert(node->count == 3);
 
@@ -808,6 +808,10 @@ SymbolInfo* Interpreter::Logic(SyntaxComponent *node)
 		else if (op == "=")
 		{
 			result->flag =  (first->value == second->value);
+		}
+		else if (op == "eq?")
+		{
+			result->flag = (first == second);
 		}
 		ReleaseSymbol(first);
 		ReleaseSymbol(second);
@@ -963,6 +967,9 @@ SymbolInfo* Interpreter::Let(SyntaxComponent *node)
 		assert(variable->count == 0 && variable->data->type == LexComponent::STR);
 
 		tmp = Evaluate(line->children->back());
+		assert(tmp != NULL);
+		ReleaseSymbol(tmp);
+		tmp = CopySymbol(tmp);
 		tmp->name = variable->data->token;
 
 		env->AddSymbol(tmp);
@@ -1095,7 +1102,7 @@ SymbolInfo* Interpreter::MiscFunc(SyntaxComponent *node)
 			}
 			else if (sym->type == SymbolInfo::TXT)
 			{
-				cout << sym->text->substr(1, sym->text->size() - 2);
+				cout << sym->text->data.substr(1, sym->text->data.size() - 2);
 			}
 			else
 			{
@@ -1134,17 +1141,11 @@ SymbolInfo* Interpreter::CopySymbol(SymbolInfo *sym)
 
 	if (sym->type == SymbolInfo::FUN || sym->type == SymbolInfo::LAMBDA)
 	{
-		result->func = new FunctionInfo;
-		result->func->body = sym->func->body;
-		result->func->env = NewEnvironment();
-		result->func->env->name = sym->func->env->name;
-		result->func->env->next = sym->func->env->next;
-		result->func->env->parent = sym->func->env->parent;
+		++result->func->count;
 	}
 	else if (sym->type == SymbolInfo::TXT)
 	{
-		result->text = new string;
-		*result->text = *sym->text;
+		++result->text->count;
 	}
 
 	return result;
@@ -1313,11 +1314,17 @@ void Interpreter::ClearSymbols(bool force)
 		{
 			if ((*it)->type == SymbolInfo::FUN || (*it)->type == SymbolInfo::LAMBDA)
 			{
-				delete (*it)->func;
+				if (--(*it)->func->count == 0)
+				{
+					delete (*it)->func;
+				}
 			}
 			else if ((*it)->type == SymbolInfo::TXT)
 			{
-				delete (*it)->text;
+				if (--(*it)->text->count == 0)
+				{
+					delete (*it)->text;
+				}
 			}
 			++emptySymbolSize;
 			(*it)->useState = SymbolInfo::EMPTY;

@@ -7,7 +7,7 @@
 #include <set>
 using namespace std;
 
-const char* l4_keys[] = {"+", "-", "*", "/", "%", ">", "<", "=", "and", "or", "not", "define", "lambda", "set!", "let", "begin", "if", "cond", "else", "true", "false", "cons", "car", "cdr", "pair?", "list", "null", "null?", "display", "newline", "random"};
+const char* l4_keys[] = {"+", "-", "*", "/", "%", ">", "<", "=", "and", "or", "not", "define", "lambda", "set!", "let", "begin", "if", "cond", "else", "true", "false", "cons", "car", "cdr", "pair?", "list", "null", "null?", "eq?", "display", "newline", "random"};
 
 const int SYMBOL_TABLE_MIN_SIZE = 128;
 
@@ -67,8 +67,19 @@ struct EnvironmentInfo;
 
 struct FunctionInfo
 {
+	FunctionInfo():count(1){}
+
 	SyntaxComponent *body;
 	EnvironmentInfo *env;
+	int count;
+};
+
+struct TextInfo
+{
+	TextInfo():count(1){}
+
+	string data;
+	int count;
 };
 
 struct SymbolInfo
@@ -86,7 +97,7 @@ struct SymbolInfo
 		bool flag;
 		double value;
 		FunctionInfo* func;
-		string* text;
+		TextInfo* text;
 		SymbolInfo* pdata[2];
 		EnvironmentInfo* parent;
 	};
